@@ -1,0 +1,30 @@
+{
+  "name": "http-bench",
+  "version": "0.1.0",
+  "description": "A small HTTP load tester: concurrency, percentile latencies, histograms",
+  "type": "module",
+  "bin": {
+    "http-bench": "bin/http-bench.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "http",
+    "benchmark",
+    "load-test",
+    "latency",
+    "cli"
+  ],
+  "author": "Avery Lane",
+  "license": "MIT"
+}
