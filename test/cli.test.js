@@ -1,0 +1,63 @@
+import assert from "node:assert/strict";
+import { after, before, describe, it } from "node:test";
+
+import { main } from "../src/cli.js";
+import { capture } from "./helpers.js";
+import { startServer } from "./server.js";
+
+let server;
+before(async () => { server = await startServer(); });
+after(() => server.close());
+
+async function run(args) {
+  const { io, out } = capture();
+  const code = await main(args, io);
+  return { code, ...out };
+}
+
+describe("cli", () => {
+  it("runs the benchmark and prints a report", async () => {
+    server.requests.length = 0;
+    const { code, stdout, stderr } = await run(["-n", "30", "-c", "3", `${server.url}/ok`]);
+    assert.equal(code, 0);
+    assert.equal(stderr, "");
+    assert.equal(server.requests.length, 30);
+    assert.match(stdout, new RegExp(`^GET ${server.url}/ok\\n30 requests in [\\d.]+ s with concurrency 3\\n`));
+    assert.match(stdout, /\n[\d.]+ requests\/s\n/);
+    for (const label of ["min", "mean", "p50", "p90", "p99", "max"]) assert.match(stdout, new RegExp(`\\n  ${label} +[\\d.]+ ms\\n`), label);
+  });
+
+  it("uses 100 requests and 10 connections by default", async () => {
+    server.requests.length = 0;
+    const { stdout } = await run([`${server.url}/ok`]);
+    assert.equal(server.requests.length, 100);
+    assert.match(stdout, /100 requests in .* concurrency 10/);
+  });
+
+  it("rejects bad numbers, missing and extra URLs", async () => {
+    for (const args of [["-n", "0", server.url], ["-c", "many", server.url], ["-n", "1.5", server.url], [], [server.url, server.url]]) {
+      const { code, stdout, stderr } = await run(args);
+      assert.equal(code, 2, args.join(" "));
+      assert.equal(stdout, "");
+      assert.match(stderr, /^http-bench: /);
+    }
+  });
+
+  it("rejects URLs that are not http or https", async () => {
+    assert.match((await run(["not a url"])).stderr, /not a valid URL/);
+    assert.match((await run(["ftp://example.com/"])).stderr, /unsupported protocol ftp:/);
+  });
+
+  it("prints help and version", async () => {
+    const help = await run(["--help"]);
+    assert.equal(help.code, 0);
+    assert.match(help.stdout, /^Usage: http-bench/);
+    assert.match((await run(["-v"])).stdout, /^http-bench \d+\.\d+\.\d+\n$/);
+  });
+
+  it("rejects unknown options", async () => {
+    const { code, stderr } = await run(["--turbo", server.url]);
+    assert.equal(code, 2);
+    assert.match(stderr, /Unknown option '--turbo'/);
+  });
+});
