@@ -18,6 +18,20 @@ describe("run", () => {
     assert.ok(elapsedMs > 0);
   });
 
+  it("stops sending when the duration is over and lets requests in flight finish", async () => {
+    server.requests.length = 0;
+    const { samples, elapsedMs } = await run({ url: `${server.url}/slow?ms=20`, duration: 150, concurrency: 2 });
+    assert.ok(samples.length >= 6 && samples.length <= 18, `got ${samples.length} samples`);
+    assert.ok(samples.every((s) => s.status === 200));
+    assert.ok(elapsedMs >= 150 && elapsedMs < 600, `took ${elapsedMs} ms`);
+    assert.equal(server.requests.length, samples.length);
+  });
+
+  it("stops at the request count when that comes first", async () => {
+    const { samples } = await run({ url: `${server.url}/ok`, requests: 5, duration: 5000, concurrency: 2 });
+    assert.equal(samples.length, 5);
+  });
+
   it("does not use more workers than requests", async () => {
     server.requests.length = 0;
     const { samples } = await run({ url: `${server.url}/ok`, requests: 3, concurrency: 50 });

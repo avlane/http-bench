@@ -7,14 +7,19 @@ export function describeError(error) {
 }
 
 /**
- * Send `requests` requests with `concurrency` of them in flight at a time.
+ * Send requests with `concurrency` of them in flight at a time, until `requests` have been
+ * sent or `duration` milliseconds have passed, whichever comes first. A request that
+ * is already in flight when the time is up is allowed to finish.
  * Returns one sample per request: {latency (ms), status} or {latency, error}.
  */
-export async function run({ url, requests, concurrency, method = "GET", headers, body, fetchImpl = globalThis.fetch }) {
+export async function run({ url, requests, duration, concurrency, method = "GET", headers, body, fetchImpl = globalThis.fetch }) {
   const samples = [];
+  const limit = requests ?? Infinity;
   let issued = 0;
+  const started = performance.now();
+  const deadline = duration === undefined ? Infinity : started + duration;
   async function worker() {
-    while (issued < requests) {
+    while (issued < limit && performance.now() < deadline) {
       issued += 1;
       const start = performance.now();
       try {
@@ -25,7 +30,6 @@ export async function run({ url, requests, concurrency, method = "GET", headers,
       }
     }
   }
-  const started = performance.now();
-  await Promise.all(Array.from({ length: Math.min(concurrency, requests) }, worker));
+  await Promise.all(Array.from({ length: Math.min(concurrency, limit) }, worker));
   return { samples, elapsedMs: performance.now() - started };
 }

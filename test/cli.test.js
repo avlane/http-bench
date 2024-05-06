@@ -34,6 +34,28 @@ describe("cli", () => {
     assert.match(stdout, /100 requests in .* concurrency 10/);
   });
 
+  it("runs for a duration with -d", async () => {
+    server.requests.length = 0;
+    const { code, stdout } = await run(["-d", "200ms", "-c", "2", `${server.url}/slow?ms=20`]);
+    assert.equal(code, 0);
+    assert.ok(server.requests.length >= 8, `only ${server.requests.length} requests`);
+    assert.match(stdout, new RegExp(`${server.requests.length} requests in 0\\.\\d\\d s`));
+  });
+
+  it("combines -n and -d: whichever limit comes first", async () => {
+    server.requests.length = 0;
+    await run(["-n", "7", "-d", "10s", `${server.url}/ok`]);
+    assert.equal(server.requests.length, 7);
+  });
+
+  it("rejects bad durations", async () => {
+    for (const bad of ["10", "fast", "0s"]) {
+      const { code, stderr } = await run(["-d", bad, server.url]);
+      assert.equal(code, 2, bad);
+      assert.match(stderr, /--duration/, bad);
+    }
+  });
+
   it("rejects bad numbers, missing and extra URLs", async () => {
     for (const args of [["-n", "0", server.url], ["-c", "many", server.url], ["-n", "1.5", server.url], [], [server.url, server.url]]) {
       const { code, stdout, stderr } = await run(args);

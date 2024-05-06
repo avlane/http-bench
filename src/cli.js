@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { parseArgs } from "node:util";
 
+import { parseDuration } from "./duration.js";
 import { formatText } from "./report.js";
 import { run } from "./runner.js";
 
@@ -14,14 +15,16 @@ const HELP = `Usage: http-bench [options] URL
 Send HTTP requests to URL and report throughput and latency percentiles.
 
 Options:
-  -n, --requests N     number of requests to send (default: 100)
+  -n, --requests N     number of requests to send (default: 100 unless --duration is given)
+  -d, --duration TIME  send requests for this long, e.g. 10s or 1m (stops at -n if that comes first)
   -c, --concurrency N  requests in flight at a time (default: 10)
   -h, --help           show this help
   -v, --version        show the version
 `;
 
 const OPTIONS = {
-  requests: { type: "string", short: "n", default: "100" },
+  requests: { type: "string", short: "n" },
+  duration: { type: "string", short: "d" },
   concurrency: { type: "string", short: "c", default: "10" },
   help: { type: "boolean", short: "h" },
   version: { type: "boolean", short: "v" },
@@ -62,10 +65,20 @@ export async function main(argv, io = {}) {
     }
     if (url.protocol !== "http:" && url.protocol !== "https:") throw new UsageError(`unsupported protocol ${url.protocol} (use http or https)`);
 
+    let duration;
+    if (values.duration !== undefined) {
+      try {
+        duration = parseDuration(values.duration);
+      } catch (error) {
+        throw new UsageError(`--duration: ${error.message}`);
+      }
+      if (duration === 0) throw new UsageError("--duration must be longer than zero");
+    }
     const config = {
       url: url.href,
       method: "GET",
-      requests: positiveInteger("requests", values.requests),
+      requests: values.requests !== undefined ? positiveInteger("requests", values.requests) : duration === undefined ? 100 : undefined,
+      duration,
       concurrency: positiveInteger("concurrency", values.concurrency),
     };
     const result = await run({ ...config, fetchImpl: io.fetch });
