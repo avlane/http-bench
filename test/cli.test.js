@@ -48,6 +48,34 @@ describe("cli", () => {
     assert.equal(server.requests.length, 7);
   });
 
+  it("sends the method, headers and body it was given", async () => {
+    server.requests.length = 0;
+    const { code } = await run(["-n", "2", "-X", "PUT", "-H", "X-Test: yes", "-H", "Accept: text/plain", "-b", "payload", `${server.url}/echo`]);
+    assert.equal(code, 0);
+    assert.equal(server.requests.length, 2);
+    for (const request of server.requests) {
+      assert.equal(request.method, "PUT");
+      assert.equal(request.headers["x-test"], "yes");
+      assert.equal(request.headers.accept, "text/plain");
+      assert.equal(request.body.toString(), "payload");
+      assert.match(request.headers["user-agent"], /^http-bench\/\d+\.\d+\.\d+$/);
+    }
+  });
+
+  it("a body without a method means POST", async () => {
+    server.requests.length = 0;
+    await run(["-n", "1", "-b", "x", `${server.url}/echo`]);
+    assert.equal(server.requests[0].method, "POST");
+  });
+
+  it("rejects malformed headers, bodies on GET and unreadable body files", async () => {
+    for (const args of [["-H", "oops"], ["-X", "GET", "-b", "x"], ["--body-file", "/no/such/file"], ["-b", "x", "--body-file", "y"]]) {
+      const { code, stderr } = await run([...args, server.url]);
+      assert.equal(code, 2, args.join(" "));
+      assert.match(stderr, /^http-bench: /);
+    }
+  });
+
   it("rejects bad durations", async () => {
     for (const bad of ["10", "fast", "0s"]) {
       const { code, stderr } = await run(["-d", bad, server.url]);

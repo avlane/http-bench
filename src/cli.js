@@ -2,6 +2,7 @@ import fs from "node:fs";
 import { parseArgs } from "node:util";
 
 import { parseDuration } from "./duration.js";
+import { buildRequest } from "./request.js";
 import { formatText } from "./report.js";
 import { run } from "./runner.js";
 
@@ -18,6 +19,10 @@ Options:
   -n, --requests N     number of requests to send (default: 100 unless --duration is given)
   -d, --duration TIME  send requests for this long, e.g. 10s or 1m (stops at -n if that comes first)
   -c, --concurrency N  requests in flight at a time (default: 10)
+  -X, --method METHOD  HTTP method (default: GET, or POST when there is a body)
+  -H, --header LINE    add a request header, "Name: value" (repeatable)
+  -b, --body TEXT      request body
+      --body-file FILE read the request body from FILE
   -h, --help           show this help
   -v, --version        show the version
 `;
@@ -26,6 +31,10 @@ const OPTIONS = {
   requests: { type: "string", short: "n" },
   duration: { type: "string", short: "d" },
   concurrency: { type: "string", short: "c", default: "10" },
+  method: { type: "string", short: "X" },
+  header: { type: "string", short: "H", multiple: true },
+  body: { type: "string", short: "b" },
+  "body-file": { type: "string" },
   help: { type: "boolean", short: "h" },
   version: { type: "boolean", short: "v" },
 };
@@ -74,9 +83,23 @@ export async function main(argv, io = {}) {
       }
       if (duration === 0) throw new UsageError("--duration must be longer than zero");
     }
+    let request;
+    try {
+      request = buildRequest({
+        method: values.method,
+        headers: values.header,
+        body: values.body,
+        bodyFile: values["body-file"],
+        userAgent: `http-bench/${pkg.version}`,
+      });
+    } catch (error) {
+      throw new UsageError(error.message);
+    }
     const config = {
       url: url.href,
-      method: "GET",
+      method: request.method,
+      headers: request.headers,
+      body: request.body,
       requests: values.requests !== undefined ? positiveInteger("requests", values.requests) : duration === undefined ? 100 : undefined,
       duration,
       concurrency: positiveInteger("concurrency", values.concurrency),
