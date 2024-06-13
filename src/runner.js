@@ -10,9 +10,10 @@ export function describeError(error) {
  * Send requests with `concurrency` of them in flight at a time, until `requests` have been
  * sent or `duration` milliseconds have passed, whichever comes first. A request that
  * is already in flight when the time is up is allowed to finish.
- * Returns one sample per request: {latency (ms), status} or {latency, error}.
+ * A request that takes longer than `timeout` milliseconds is abandoned and counted as the
+ * error "timeout". Returns one sample per request: {latency (ms), status} or {latency, error}.
  */
-export async function run({ url, requests, duration, concurrency, method = "GET", headers, body, fetchImpl = globalThis.fetch }) {
+export async function run({ url, requests, duration, concurrency, method = "GET", headers, body, timeout, fetchImpl = globalThis.fetch }) {
   const samples = [];
   const limit = requests ?? Infinity;
   let issued = 0;
@@ -23,7 +24,8 @@ export async function run({ url, requests, duration, concurrency, method = "GET"
       issued += 1;
       const start = performance.now();
       try {
-        const response = await fetchImpl(url, { method, headers, body });
+        const signal = timeout === undefined ? undefined : AbortSignal.timeout(timeout);
+        const response = await fetchImpl(url, { method, headers, body, signal });
         samples.push({ latency: performance.now() - start, status: response.status });
       } catch (error) {
         samples.push({ latency: performance.now() - start, error: describeError(error) });

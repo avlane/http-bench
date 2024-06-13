@@ -10,6 +10,7 @@ const pkg = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.ur
 
 export const EXIT_OK = 0;
 export const EXIT_USAGE = 2;
+export const EXIT_NO_SUCCESS = 3; // the target was unreachable or every request failed
 
 const HELP = `Usage: http-bench [options] URL
 
@@ -17,6 +18,7 @@ Send HTTP requests to URL and report throughput and latency percentiles.
 
 Options:
   -n, --requests N     number of requests to send (default: 100 unless --duration is given)
+      --timeout TIME   give up on a request after this long (default: 10s)
   -d, --duration TIME  send requests for this long, e.g. 10s or 1m (stops at -n if that comes first)
   -c, --concurrency N  requests in flight at a time (default: 10)
   -X, --method METHOD  HTTP method (default: GET, or POST when there is a body)
@@ -30,6 +32,7 @@ Options:
 const OPTIONS = {
   requests: { type: "string", short: "n" },
   duration: { type: "string", short: "d" },
+  timeout: { type: "string", default: "10s" },
   concurrency: { type: "string", short: "c", default: "10" },
   method: { type: "string", short: "X" },
   header: { type: "string", short: "H", multiple: true },
@@ -83,6 +86,13 @@ export async function main(argv, io = {}) {
       }
       if (duration === 0) throw new UsageError("--duration must be longer than zero");
     }
+    let timeout;
+    try {
+      timeout = parseDuration(values.timeout);
+    } catch (error) {
+      throw new UsageError(`--timeout: ${error.message}`);
+    }
+    if (timeout === 0) throw new UsageError("--timeout must be longer than zero");
     let request;
     try {
       request = buildRequest({
@@ -100,13 +110,14 @@ export async function main(argv, io = {}) {
       method: request.method,
       headers: request.headers,
       body: request.body,
+      timeout,
       requests: values.requests !== undefined ? positiveInteger("requests", values.requests) : duration === undefined ? 100 : undefined,
       duration,
       concurrency: positiveInteger("concurrency", values.concurrency),
     };
     const result = await run({ ...config, fetchImpl: io.fetch });
     stdout.write(formatText(config, result));
-    return EXIT_OK;
+    return result.samples.some((s) => s.status !== undefined) ? EXIT_OK : EXIT_NO_SUCCESS;
   } catch (error) {
     if (error instanceof UsageError) {
       stderr.write(`http-bench: ${error.message}\n`);

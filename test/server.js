@@ -1,5 +1,14 @@
 import http from "node:http";
 
+/** A local port where nothing is listening, for testing connection errors. */
+export async function closedPort() {
+  const server = http.createServer();
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address();
+  await new Promise((resolve) => server.close(resolve));
+  return port;
+}
+
 /**
  * A small HTTP server for the tests, listening on a random local port.
  *

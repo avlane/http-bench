@@ -53,6 +53,17 @@ describe("run", () => {
     assert.equal(peak, 4);
   });
 
+  it("abandons requests that exceed the timeout", async () => {
+    const { samples } = await run({ url: `${server.url}/slow?ms=500`, requests: 3, concurrency: 3, timeout: 40 });
+    assert.deepEqual(samples.map((s) => s.error), ["timeout", "timeout", "timeout"]);
+    assert.ok(samples.every((s) => s.latency >= 35 && s.latency < 300), JSON.stringify(samples));
+  });
+
+  it("does not time out requests that finish in time", async () => {
+    const { samples } = await run({ url: `${server.url}/slow?ms=10`, requests: 3, concurrency: 3, timeout: 2000 });
+    assert.deepEqual(samples.map((s) => s.status), [200, 200, 200]);
+  });
+
   it("records failures as errors instead of throwing", async () => {
     const { samples } = await run({ url: `${server.url}/drop`, requests: 4, concurrency: 2 });
     assert.equal(samples.length, 4);

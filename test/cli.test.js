@@ -3,7 +3,7 @@ import { after, before, describe, it } from "node:test";
 
 import { main } from "../src/cli.js";
 import { capture } from "./helpers.js";
-import { startServer } from "./server.js";
+import { closedPort, startServer } from "./server.js";
 
 let server;
 before(async () => { server = await startServer(); });
@@ -73,6 +73,36 @@ describe("cli", () => {
       const { code, stderr } = await run([...args, server.url]);
       assert.equal(code, 2, args.join(" "));
       assert.match(stderr, /^http-bench: /);
+    }
+  });
+
+  it("gives up on slow requests after --timeout and reports them", async () => {
+    const { code, stdout } = await run(["-n", "4", "-c", "4", "--timeout", "50ms", `${server.url}/slow?ms=400`]);
+    assert.equal(code, 3); // nothing succeeded
+    assert.match(stdout, /\n4 failed \(timeout: 4\)\n/);
+    assert.ok(!stdout.includes("Latency"));
+  });
+
+  it("reports connection errors and exits 3 when nothing could be reached", async () => {
+    const { code, stdout } = await run(["-n", "3", `http://127.0.0.1:${await closedPort()}/`]);
+    assert.equal(code, 3);
+    assert.match(stdout, /\n3 failed \(ECONNREFUSED: 3\)\n/);
+  });
+
+  it("exits 0 when only some requests fail", async () => {
+    const { code, stdout } = await run(["-n", "6", "-c", "1", `${server.url}/drop`]);
+    assert.equal(code, 3);
+    const mixed = await run(["-n", "4", `${server.url}/ok`]);
+    assert.equal(mixed.code, 0);
+    assert.ok(!mixed.stdout.includes("failed"));
+    assert.ok(stdout.includes("6 failed"));
+  });
+
+  it("rejects bad timeouts", async () => {
+    for (const bad of ["5", "0ms", "soon"]) {
+      const { code, stderr } = await run(["--timeout", bad, server.url]);
+      assert.equal(code, 2, bad);
+      assert.match(stderr, /--timeout/, bad);
     }
   });
 
