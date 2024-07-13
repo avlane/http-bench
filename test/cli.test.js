@@ -106,6 +106,18 @@ describe("cli", () => {
     }
   });
 
+  it("--warmup takes a request count or a duration", async () => {
+    server.requests.length = 0;
+    const counted = await run(["-n", "5", "--warmup", "4", `${server.url}/ok`]);
+    assert.equal(counted.code, 0);
+    assert.equal(server.requests.length, 9);
+    assert.match(counted.stdout, /\n5 requests in /);
+    server.requests.length = 0;
+    await run(["-n", "5", "--warmup", "80ms", "-c", "1", `${server.url}/slow?ms=15`]);
+    assert.ok(server.requests.length > 5);
+    for (const bad of ["0", "-3", "x"]) assert.equal((await run(["--warmup", bad, server.url])).code, 2, bad);
+  });
+
   it("rejects bad durations", async () => {
     for (const bad of ["10", "fast", "0s"]) {
       const { code, stderr } = await run(["-d", bad, server.url]);

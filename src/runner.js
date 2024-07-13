@@ -10,10 +10,20 @@ export function describeError(error) {
  * Send requests with `concurrency` of them in flight at a time, until `requests` have been
  * sent or `duration` milliseconds have passed, whichever comes first. A request that
  * is already in flight when the time is up is allowed to finish.
+ * With `warmup` ({requests} or {duration}) a first phase of that size runs before the
+ * measured one and its samples are discarded.
  * A request that takes longer than `timeout` milliseconds is abandoned and counted as the
  * error "timeout". Returns one sample per request: {latency (ms), status} or {latency, error}.
  */
-export async function run({ url, requests, duration, concurrency, method = "GET", headers, body, timeout, fetchImpl = globalThis.fetch }) {
+export async function run({ warmup, ...options }) {
+  if (warmup) {
+    // Connections, DNS and server caches get warm; none of this is measured.
+    await runPhase({ ...options, requests: warmup.requests, duration: warmup.duration });
+  }
+  return runPhase(options);
+}
+
+async function runPhase({ url, requests, duration, concurrency, method = "GET", headers, body, timeout, fetchImpl = globalThis.fetch }) {
   const samples = [];
   const limit = requests ?? Infinity;
   let issued = 0;

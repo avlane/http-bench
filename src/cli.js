@@ -18,6 +18,7 @@ Send HTTP requests to URL and report throughput and latency percentiles.
 
 Options:
   -n, --requests N     number of requests to send (default: 100 unless --duration is given)
+      --warmup N|TIME  send N requests (or send for TIME) first and leave them out of the results
       --timeout TIME   give up on a request after this long (default: 10s)
   -d, --duration TIME  send requests for this long, e.g. 10s or 1m (stops at -n if that comes first)
   -c, --concurrency N  requests in flight at a time (default: 10)
@@ -33,6 +34,7 @@ const OPTIONS = {
   requests: { type: "string", short: "n" },
   duration: { type: "string", short: "d" },
   timeout: { type: "string", default: "10s" },
+  warmup: { type: "string" },
   concurrency: { type: "string", short: "c", default: "10" },
   method: { type: "string", short: "X" },
   header: { type: "string", short: "H", multiple: true },
@@ -86,6 +88,14 @@ export async function main(argv, io = {}) {
       }
       if (duration === 0) throw new UsageError("--duration must be longer than zero");
     }
+    let warmup;
+    if (values.warmup !== undefined) {
+      try {
+        warmup = /^\d+$/.test(values.warmup) ? { requests: positiveInteger("warmup", values.warmup) } : { duration: parseDuration(values.warmup) };
+      } catch (error) {
+        throw error instanceof UsageError ? error : new UsageError(`--warmup: ${error.message} (a request count such as 50, or a duration such as 2s)`);
+      }
+    }
     let timeout;
     try {
       timeout = parseDuration(values.timeout);
@@ -111,6 +121,7 @@ export async function main(argv, io = {}) {
       headers: request.headers,
       body: request.body,
       timeout,
+      warmup,
       requests: values.requests !== undefined ? positiveInteger("requests", values.requests) : duration === undefined ? 100 : undefined,
       duration,
       concurrency: positiveInteger("concurrency", values.concurrency),

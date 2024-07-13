@@ -32,6 +32,20 @@ describe("run", () => {
     assert.equal(samples.length, 5);
   });
 
+  it("sends warmup requests first and leaves them out of the samples", async () => {
+    server.requests.length = 0;
+    const { samples } = await run({ url: `${server.url}/ok`, requests: 10, concurrency: 2, warmup: { requests: 6 } });
+    assert.equal(samples.length, 10);
+    assert.equal(server.requests.length, 16);
+  });
+
+  it("a warmup can be a duration", async () => {
+    server.requests.length = 0;
+    const { samples } = await run({ url: `${server.url}/slow?ms=10`, requests: 3, concurrency: 1, warmup: { duration: 60 } });
+    assert.equal(samples.length, 3);
+    assert.ok(server.requests.length >= 3 + 3, `${server.requests.length} requests reached the server`);
+  });
+
   it("does not use more workers than requests", async () => {
     server.requests.length = 0;
     const { samples } = await run({ url: `${server.url}/ok`, requests: 3, concurrency: 50 });
