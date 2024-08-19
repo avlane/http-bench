@@ -27,6 +27,17 @@ describe("cli", () => {
     for (const label of ["min", "mean", "p50", "p90", "p99", "max"]) assert.match(stdout, new RegExp(`\\n  ${label} +[\\d.]+ ms\\n`), label);
   });
 
+  it("draws a latency histogram", async () => {
+    const { stdout } = await run(["-n", "60", "-c", "4", `${server.url}/slow?ms=3`]);
+    const section = stdout.split("\nHistogram\n")[1];
+    assert.ok(section, "no Histogram section");
+    const rows = section.trimEnd().split("\n");
+    assert.ok(rows.length >= 2 && rows.length <= 11, `${rows.length} rows`);
+    assert.ok(rows.every((row) => /ms +\u2588* +\d+ +[\d.]+%/.test(row)), section);
+    const total = rows.reduce((sum, row) => sum + Number(/ (\d+) +[\d.]+%/.exec(row)[1]), 0);
+    assert.equal(total, 60);
+  });
+
   it("uses 100 requests and 10 connections by default", async () => {
     server.requests.length = 0;
     const { stdout } = await run([`${server.url}/ok`]);

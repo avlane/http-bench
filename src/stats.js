@@ -9,6 +9,29 @@ export function percentile(sorted, p) {
   return sorted[Math.min(sorted.length, Math.max(1, rank)) - 1];
 }
 
+/**
+ * A histogram for display: `bins` equal-width bins from the smallest value to the 99th
+ * percentile, plus one row for the slowest 1% so that a few outliers don't squash
+ * everything else into the first bin. Rows are {from, to, count[, tail]}.
+ */
+export function histogram(values, bins = 10) {
+  if (values.length === 0) return [];
+  const sorted = Float64Array.from(values).sort();
+  const min = sorted[0];
+  const max = sorted[sorted.length - 1];
+  const upper = percentile(sorted, 99);
+  if (!(upper > min)) return [{ from: min, to: max, count: sorted.length }];
+  const width = (upper - min) / bins;
+  const rows = Array.from({ length: bins }, (_, i) => ({ from: min + i * width, to: min + (i + 1) * width, count: 0 }));
+  const tail = { from: upper, to: max, count: 0, tail: true };
+  for (const value of sorted) {
+    if (value > upper) tail.count += 1;
+    else rows[Math.min(bins - 1, Math.floor((value - min) / width))].count += 1;
+  }
+  if (tail.count > 0) rows.push(tail);
+  return rows;
+}
+
 export const DEFAULT_PERCENTILES = [50, 75, 90, 95, 99, 99.9];
 
 /** Summary statistics of a list of numbers (latencies in milliseconds). */
