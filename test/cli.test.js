@@ -38,6 +38,38 @@ describe("cli", () => {
     assert.equal(total, 60);
   });
 
+  it("prints JSON with --json", async () => {
+    const { code, stdout, stderr } = await run(["--json", "-n", "40", "-c", "4", "-H", "Authorization: Bearer topsecret", "-H", "X-Test: 1", `${server.url}/ok`]);
+    assert.equal(code, 0);
+    assert.equal(stderr, "");
+    const doc = JSON.parse(stdout);
+    assert.equal(doc.version, 1);
+    assert.equal(doc.tool.name, "http-bench");
+    assert.deepEqual(doc.config, {
+      url: `${server.url}/ok`, method: "GET", concurrency: 4, requests: 40, durationMs: null, warmup: null,
+      timeoutMs: 10000, bodyBytes: 0,
+      headers: { authorization: "<redacted>", "x-test": "1", "user-agent": doc.config.headers["user-agent"] },
+    });
+    assert.equal(doc.summary.requests, 40);
+    assert.equal(doc.summary.errors, 0);
+    assert.ok(doc.summary.requestsPerSecond > 0);
+    for (const key of ["min", "mean", "stddev", "max"]) assert.equal(typeof doc.latencyMs[key], "number", key);
+    assert.deepEqual(Object.keys(doc.latencyMs.percentiles), ["50", "75", "90", "95", "99", "99.9"]);
+    assert.ok(doc.latencyMs.min <= doc.latencyMs.percentiles[50] && doc.latencyMs.percentiles[99] <= doc.latencyMs.max);
+    assert.equal(doc.histogram.reduce((sum, row) => sum + row.count, 0), 40);
+    assert.ok(!stdout.includes("topsecret"));
+  });
+
+  it("JSON output is valid even when every request fails", async () => {
+    const { code, stdout } = await run(["--json", "-n", "3", `${server.url}/drop`]);
+    assert.equal(code, 3);
+    const doc = JSON.parse(stdout);
+    assert.equal(doc.summary.errors, 3);
+    assert.equal(doc.latencyMs.min, null);
+    assert.deepEqual(doc.histogram, []);
+    assert.equal(Object.values(doc.errors).reduce((a, b) => a + b, 0), 3);
+  });
+
   it("uses 100 requests and 10 connections by default", async () => {
     server.requests.length = 0;
     const { stdout } = await run([`${server.url}/ok`]);

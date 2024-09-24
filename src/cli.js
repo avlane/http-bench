@@ -3,7 +3,8 @@ import { parseArgs } from "node:util";
 
 import { parseDuration } from "./duration.js";
 import { buildRequest } from "./request.js";
-import { formatText } from "./report.js";
+import { analyze } from "./analysis.js";
+import { formatJson, formatText } from "./report.js";
 import { run } from "./runner.js";
 
 const pkg = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8"));
@@ -26,6 +27,7 @@ Options:
   -H, --header LINE    add a request header, "Name: value" (repeatable)
   -b, --body TEXT      request body
       --body-file FILE read the request body from FILE
+      --json           print the results as JSON instead of text
   -h, --help           show this help
   -v, --version        show the version
 `;
@@ -40,6 +42,7 @@ const OPTIONS = {
   header: { type: "string", short: "H", multiple: true },
   body: { type: "string", short: "b" },
   "body-file": { type: "string" },
+  json: { type: "boolean" },
   help: { type: "boolean", short: "h" },
   version: { type: "boolean", short: "v" },
 };
@@ -127,7 +130,8 @@ export async function main(argv, io = {}) {
       concurrency: positiveInteger("concurrency", values.concurrency),
     };
     const result = await run({ ...config, fetchImpl: io.fetch });
-    stdout.write(formatText(config, result));
+    const analysis = analyze(result);
+    stdout.write(values.json ? formatJson(config, analysis, pkg.version) : formatText(config, analysis));
     return result.samples.some((s) => s.status !== undefined) ? EXIT_OK : EXIT_NO_SUCCESS;
   } catch (error) {
     if (error instanceof UsageError) {

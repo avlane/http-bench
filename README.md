@@ -10,3 +10,8 @@ percentile latencies, a latency histogram and JSON output.
 wins), `-c` sets how many are in flight at once.
 `--warmup 50` (or `--warmup 2s`) sends traffic first without measuring it, so connection setup
 and cold caches don't distort the results.
+## JSON output
+
+`--json` prints one JSON document instead of the text report, for scripts and for comparing
+runs. Header values that look like credentials (`Authorization`, `Cookie`, `X-Api-Key`) are
+replaced by `<redacted>` in the `config` section.

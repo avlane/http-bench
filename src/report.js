@@ -1,5 +1,5 @@
+import { describeConfig } from "./analysis.js";
 import { formatMs } from "./format.js";
-import { histogram, summarize } from "./stats.js";
 
 const BAR_WIDTH = 30;
 
@@ -14,34 +14,49 @@ function histogramLines(rows) {
   });
 }
 
-function countBy(samples, key) {
-  const counts = new Map();
-  for (const sample of samples) {
-    const value = sample[key];
-    if (value !== undefined) counts.set(value, (counts.get(value) ?? 0) + 1);
-  }
-  return counts;
-}
-
-export function formatText({ url, method, concurrency }, { samples, elapsedMs }) {
-  const responses = samples.filter((s) => s.error === undefined);
-  const errors = samples.length - responses.length;
-  const latency = summarize(responses.map((s) => s.latency));
-  const seconds = elapsedMs / 1000;
+export function formatText(config, analysis) {
+  const { latency } = analysis;
   const lines = [
-    `${method} ${url}`,
-    `${samples.length} requests in ${seconds.toFixed(2)} s with concurrency ${concurrency}`,
-    `${(samples.length / seconds).toFixed(1)} requests/s`,
+    `${config.method} ${config.url}`,
+    `${analysis.requests} requests in ${(analysis.elapsedMs / 1000).toFixed(2)} s with concurrency ${config.concurrency}`,
+    `${analysis.requestsPerSecond.toFixed(1)} requests/s`,
   ];
-  if (errors > 0) {
-    const detail = [...countBy(samples, "error")].map(([name, count]) => `${name}: ${count}`).join(", ");
-    lines.push(`${errors} failed (${detail})`);
+  if (analysis.errors > 0) {
+    const detail = Object.entries(analysis.errorCounts).map(([name, count]) => `${name}: ${count}`).join(", ");
+    lines.push(`${analysis.errors} failed (${detail})`);
   }
   if (latency.count > 0) {
     lines.push("", "Latency", `  min   ${formatMs(latency.min)}`, `  mean  ${formatMs(latency.mean)}`);
     for (const [p, value] of Object.entries(latency.percentiles)) lines.push(`  p${p}`.padEnd(8) + formatMs(value));
     lines.push(`  max   ${formatMs(latency.max)}`);
-    lines.push("", "Histogram", ...histogramLines(histogram(responses.map((s) => s.latency))));
+    lines.push("", "Histogram", ...histogramLines(analysis.histogram));
   }
   return lines.join("\n") + "\n";
+}
+
+/** The machine-readable report; the layout is described in the README. */
+export function formatJson(config, analysis, version) {
+  const { latency } = analysis;
+  const document = {
+    version: 1,
+    tool: { name: "http-bench", version },
+    config: describeConfig(config),
+    summary: {
+      requests: analysis.requests,
+      responses: analysis.responses,
+      errors: analysis.errors,
+      elapsedMs: analysis.elapsedMs,
+      requestsPerSecond: analysis.requestsPerSecond,
+    },
+    latencyMs: {
+      min: latency.min,
+      mean: latency.mean,
+      stddev: latency.stddev,
+      max: latency.max,
+      percentiles: latency.percentiles,
+    },
+    histogram: analysis.histogram.map(({ from, to, count, tail }) => ({ fromMs: from, toMs: to, count, ...(tail ? { tail } : {}) })),
+    errors: analysis.errorCounts,
+  };
+  return JSON.stringify(document, null, 2) + "\n";
 }
