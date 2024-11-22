@@ -132,6 +132,29 @@ describe("cli", () => {
     assert.match(stdout, /\n3 failed \(ECONNREFUSED: 3\)\n/);
   });
 
+  it("counts HTTP error statuses as failures and lists the status codes", async () => {
+    const { code, stdout } = await run(["-n", "5", "-c", "1", `${server.url}/status/503`]);
+    assert.equal(code, 3);
+    assert.match(stdout, /\n5 failed \(HTTP 503: 5\)\n/);
+    assert.match(stdout, /\nStatus codes\n {2}503 {2}5\n/);
+  });
+
+  it("redirect statuses are not failures", async () => {
+    const { code, stdout } = await run(["-n", "3", `${server.url}/status/204`]);
+    assert.equal(code, 0);
+    assert.ok(!stdout.includes("failed"));
+    assert.match(stdout, /\nStatus codes\n {2}204 {2}3\n/);
+  });
+
+  it("mixed results: exit 0 while something succeeded", async () => {
+    const { code, stdout } = await run(["--json", "-n", "6", "-c", "1", `${server.url}/flaky`]);
+    assert.equal(code, 0);
+    const doc = JSON.parse(stdout);
+    assert.deepEqual(doc.statusCodes, { 200: 4, 500: 2 });
+    assert.deepEqual([doc.summary.successes, doc.summary.errors], [4, 2]);
+    assert.deepEqual(doc.errors, { "HTTP 500": 2 });
+  });
+
   it("exits 0 when only some requests fail", async () => {
     const { code, stdout } = await run(["-n", "6", "-c", "1", `${server.url}/drop`]);
     assert.equal(code, 3);

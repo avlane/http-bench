@@ -132,7 +132,7 @@ export async function main(argv, io = {}) {
     const result = await run({ ...config, fetchImpl: io.fetch });
     const analysis = analyze(result);
     stdout.write(values.json ? formatJson(config, analysis, pkg.version) : formatText(config, analysis));
-    return result.samples.some((s) => s.status !== undefined) ? EXIT_OK : EXIT_NO_SUCCESS;
+    return analysis.successes > 0 ? EXIT_OK : EXIT_NO_SUCCESS;
   } catch (error) {
     if (error instanceof UsageError) {
       stderr.write(`http-bench: ${error.message}\n`);

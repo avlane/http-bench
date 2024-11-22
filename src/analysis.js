@@ -32,14 +32,21 @@ export function describeConfig(config) {
 export function analyze({ samples, elapsedMs }) {
   const responses = samples.filter((s) => s.error === undefined);
   const latencies = responses.map((s) => s.latency);
+  const failedStatuses = responses.filter((s) => s.status >= 400).length;
   return {
     requests: samples.length,
     responses: responses.length,
-    errors: samples.length - responses.length,
+    // Failures are transport errors and HTTP error statuses (4xx, 5xx). Redirects are fine.
+    errors: samples.length - responses.length + failedStatuses,
+    successes: responses.length - failedStatuses,
+    statusCodes: Object.fromEntries([...countBy(responses, "status")].sort((a, b) => a[0] - b[0])),
     elapsedMs,
     requestsPerSecond: elapsedMs > 0 ? samples.length / (elapsedMs / 1000) : 0,
     latency: summarize(latencies),
     histogram: histogram(latencies),
-    errorCounts: Object.fromEntries(countBy(samples, "error")),
+    errorCounts: {
+      ...Object.fromEntries(countBy(samples, "error")),
+      ...Object.fromEntries([...countBy(responses.filter((s) => s.status >= 400), "status")].map(([status, count]) => [`HTTP ${status}`, count])),
+    },
   };
 }

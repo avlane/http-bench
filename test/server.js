@@ -16,12 +16,14 @@ export async function closedPort() {
  *   /status/CODE      the given status
  *   /slow?ms=N        200 after N milliseconds
  *   /echo             JSON with the method, headers and body of the request
+ *   /flaky            every third response is a 500
  *   /drop             closes the connection without answering
  *
  * Every request is recorded in `requests`.
  */
 export async function startServer() {
   const requests = [];
+  let flakyCount = 0;
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, "http://localhost");
     const chunks = [];
@@ -36,6 +38,10 @@ export async function startServer() {
       if (url.pathname === "/ok") return send(200, "ok");
       if (url.pathname.startsWith("/status/")) return send(Number(url.pathname.split("/")[2]), "status");
       if (url.pathname === "/slow") return void setTimeout(() => send(200, "slow"), Number(url.searchParams.get("ms") ?? 50));
+      if (url.pathname === "/flaky") {
+        flakyCount += 1;
+        return send(flakyCount % 3 === 0 ? 500 : 200, flakyCount % 3 === 0 ? "boom" : "ok");
+      }
       if (url.pathname === "/echo") {
         return send(200, JSON.stringify({ method: req.method, headers: req.headers, body: body.toString("utf8") }), { "content-type": "application/json" });
       }

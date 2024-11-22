@@ -25,6 +25,10 @@ export function formatText(config, analysis) {
     const detail = Object.entries(analysis.errorCounts).map(([name, count]) => `${name}: ${count}`).join(", ");
     lines.push(`${analysis.errors} failed (${detail})`);
   }
+  const statuses = Object.entries(analysis.statusCodes);
+  if (statuses.length > 0) {
+    lines.push("", "Status codes", ...statuses.map(([status, count]) => `  ${status}  ${count}`));
+  }
   if (latency.count > 0) {
     lines.push("", "Latency", `  min   ${formatMs(latency.min)}`, `  mean  ${formatMs(latency.mean)}`);
     for (const [p, value] of Object.entries(latency.percentiles)) lines.push(`  p${p}`.padEnd(8) + formatMs(value));
@@ -44,6 +48,7 @@ export function formatJson(config, analysis, version) {
     summary: {
       requests: analysis.requests,
       responses: analysis.responses,
+      successes: analysis.successes,
       errors: analysis.errors,
       elapsedMs: analysis.elapsedMs,
       requestsPerSecond: analysis.requestsPerSecond,
@@ -56,6 +61,7 @@ export function formatJson(config, analysis, version) {
       percentiles: latency.percentiles,
     },
     histogram: analysis.histogram.map(({ from, to, count, tail }) => ({ fromMs: from, toMs: to, count, ...(tail ? { tail } : {}) })),
+    statusCodes: analysis.statusCodes,
     errors: analysis.errorCounts,
   };
   return JSON.stringify(document, null, 2) + "\n";
