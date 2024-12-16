@@ -15,5 +15,5 @@ export function formatBytes(bytes) {
     value /= 1024;
     unit += 1;
   }
-  return unit === 0 ? `${value} B` : `${value.toFixed(1)} ${units[unit]}`;
+  return unit === 0 ? `${Math.round(value)} B` : `${value.toFixed(1)} ${units[unit]}`;
 }

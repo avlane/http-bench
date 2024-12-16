@@ -41,6 +41,7 @@ export function analyze({ samples, elapsedMs }) {
     successes: responses.length - failedStatuses,
     statusCodes: Object.fromEntries([...countBy(responses, "status")].sort((a, b) => a[0] - b[0])),
     elapsedMs,
+    bytes: responses.reduce((sum, s) => sum + (s.bytes ?? 0), 0),
     requestsPerSecond: elapsedMs > 0 ? samples.length / (elapsedMs / 1000) : 0,
     latency: summarize(latencies),
     histogram: histogram(latencies),

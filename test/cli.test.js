@@ -70,6 +70,13 @@ describe("cli", () => {
     assert.equal(Object.values(doc.errors).reduce((a, b) => a + b, 0), 3);
   });
 
+  it("reports the amount of data received", async () => {
+    const text = (await run(["-n", "4", "-c", "2", `${server.url}/big?kb=32&ms=1`])).stdout;
+    assert.match(text, /\n128\.0 KiB received \(/);
+    const doc = JSON.parse((await run(["--json", "-n", "4", `${server.url}/big?kb=32&ms=1`])).stdout);
+    assert.equal(doc.summary.bytes, 4 * 32 * 1024);
+  });
+
   it("uses 100 requests and 10 connections by default", async () => {
     server.requests.length = 0;
     const { stdout } = await run([`${server.url}/ok`]);

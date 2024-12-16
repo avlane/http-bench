@@ -36,7 +36,10 @@ async function runPhase({ url, requests, duration, concurrency, method = "GET", 
       try {
         const signal = timeout === undefined ? undefined : AbortSignal.timeout(timeout);
         const response = await fetchImpl(url, { method, headers, body, signal });
-        samples.push({ latency: performance.now() - start, status: response.status });
+        // Read the whole body: the request is not finished before that, the connection can
+        // only be reused afterwards, and the transferred bytes are part of the results.
+        const content = await response.arrayBuffer();
+        samples.push({ latency: performance.now() - start, status: response.status, bytes: content.byteLength });
       } catch (error) {
         samples.push({ latency: performance.now() - start, error: describeError(error) });
       }

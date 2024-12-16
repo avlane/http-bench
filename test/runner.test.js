@@ -60,7 +60,7 @@ describe("run", () => {
       peak = Math.max(peak, active);
       await new Promise((resolve) => setTimeout(resolve, 5));
       active -= 1;
-      return { status: 200 };
+      return { status: 200, arrayBuffer: async () => new ArrayBuffer(0) };
     };
     const { samples } = await run({ url: "http://example.invalid/", requests: 40, concurrency: 4, fetchImpl });
     assert.equal(samples.length, 40);
@@ -76,6 +76,19 @@ describe("run", () => {
   it("does not time out requests that finish in time", async () => {
     const { samples } = await run({ url: `${server.url}/slow?ms=10`, requests: 3, concurrency: 3, timeout: 2000 });
     assert.deepEqual(samples.map((s) => s.status), [200, 200, 200]);
+  });
+
+  it("measures until the whole body has arrived and counts the bytes", async () => {
+    const { samples } = await run({ url: `${server.url}/big?kb=64&ms=30`, requests: 2, concurrency: 1 });
+    for (const sample of samples) {
+      assert.equal(sample.bytes, 64 * 1024);
+      assert.ok(sample.latency >= 80, `latency ${sample.latency} ms is shorter than the time the body takes`);
+    }
+  });
+
+  it("a body that is cut off is an error, not a success", async () => {
+    const { samples } = await run({ url: `${server.url}/big?kb=64&ms=200`, requests: 1, concurrency: 1, timeout: 100 });
+    assert.deepEqual(samples.map((s) => s.error), ["timeout"]);
   });
 
   it("records failures as errors instead of throwing", async () => {

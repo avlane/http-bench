@@ -1,5 +1,5 @@
 import { describeConfig } from "./analysis.js";
-import { formatMs } from "./format.js";
+import { formatBytes, formatMs } from "./format.js";
 
 const BAR_WIDTH = 30;
 
@@ -20,6 +20,7 @@ export function formatText(config, analysis) {
     `${config.method} ${config.url}`,
     `${analysis.requests} requests in ${(analysis.elapsedMs / 1000).toFixed(2)} s with concurrency ${config.concurrency}`,
     `${analysis.requestsPerSecond.toFixed(1)} requests/s`,
+    `${formatBytes(analysis.bytes)} received (${formatBytes(analysis.bytes / (analysis.elapsedMs / 1000))}/s)`,
   ];
   if (analysis.errors > 0) {
     const detail = Object.entries(analysis.errorCounts).map(([name, count]) => `${name}: ${count}`).join(", ");
@@ -51,6 +52,7 @@ export function formatJson(config, analysis, version) {
       successes: analysis.successes,
       errors: analysis.errors,
       elapsedMs: analysis.elapsedMs,
+      bytes: analysis.bytes,
       requestsPerSecond: analysis.requestsPerSecond,
     },
     latencyMs: {

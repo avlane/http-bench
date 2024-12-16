@@ -16,6 +16,7 @@ export async function closedPort() {
  *   /status/CODE      the given status
  *   /slow?ms=N        200 after N milliseconds
  *   /echo             JSON with the method, headers and body of the request
+ *   /big?kb=N&ms=D    N KiB sent in four chunks D milliseconds apart
  *   /flaky            every third response is a 500
  *   /drop             closes the connection without answering
  *
@@ -38,6 +39,25 @@ export async function startServer() {
       if (url.pathname === "/ok") return send(200, "ok");
       if (url.pathname.startsWith("/status/")) return send(Number(url.pathname.split("/")[2]), "status");
       if (url.pathname === "/slow") return void setTimeout(() => send(200, "slow"), Number(url.searchParams.get("ms") ?? 50));
+      if (url.pathname === "/big") {
+        // KB kilobytes in four chunks, `ms` milliseconds apart: the headers arrive at once but
+        // the response is only complete after the last chunk.
+        const total = Number(url.searchParams.get("kb") ?? 64) * 1024;
+        const delay = Number(url.searchParams.get("ms") ?? 20);
+        res.writeHead(200, { "content-type": "application/octet-stream" });
+        let sent = 0;
+        const timer = setInterval(() => {
+          const size = Math.min(total / 4, total - sent);
+          res.write(Buffer.alloc(size, 0x61));
+          sent += size;
+          if (sent >= total) {
+            clearInterval(timer);
+            res.end();
+          }
+        }, delay);
+        res.on("close", () => clearInterval(timer));
+        return;
+      }
       if (url.pathname === "/flaky") {
         flakyCount += 1;
         return send(flakyCount % 3 === 0 ? 500 : 200, flakyCount % 3 === 0 ? "boom" : "ok");
