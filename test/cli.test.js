@@ -46,7 +46,7 @@ describe("cli", () => {
     assert.equal(doc.version, 1);
     assert.equal(doc.tool.name, "http-bench");
     assert.deepEqual(doc.config, {
-      url: `${server.url}/ok`, method: "GET", concurrency: 4, requests: 40, durationMs: null, warmup: null,
+      url: `${server.url}/ok`, method: "GET", concurrency: 4, rate: null, requests: 40, durationMs: null, warmup: null,
       timeoutMs: 10000, bodyBytes: 0,
       headers: { authorization: "<redacted>", "x-test": "1", "user-agent": doc.config.headers["user-agent"] },
     });
@@ -189,6 +189,17 @@ describe("cli", () => {
     await run(["-n", "5", "--warmup", "80ms", "-c", "1", `${server.url}/slow?ms=15`]);
     assert.ok(server.requests.length > 5);
     for (const bad of ["0", "-3", "x"]) assert.equal((await run(["--warmup", bad, server.url])).code, 2, bad);
+  });
+
+  it("--rate limits the request rate", async () => {
+    const started = Date.now();
+    const { code, stdout } = await run(["-n", "9", "--rate", "40", "-c", "3", `${server.url}/ok`]);
+    assert.equal(code, 0);
+    assert.ok(Date.now() - started >= 190);
+    assert.match(stdout, /\n9 requests in 0\.[2-9]\d s/);
+    const doc = JSON.parse((await run(["--json", "-n", "2", "--rate", "100", server.url + "/ok"])).stdout);
+    assert.equal(doc.config.rate, 100);
+    for (const bad of ["0", "-5", "fast", "Infinity"]) assert.equal((await run(["--rate", bad, server.url])).code, 2, bad);
   });
 
   it("rejects bad durations", async () => {

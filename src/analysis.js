@@ -19,6 +19,7 @@ export function describeConfig(config) {
     url: config.url,
     method: config.method,
     concurrency: config.concurrency,
+    rate: config.rate ?? null,
     requests: config.requests ?? null,
     durationMs: config.duration ?? null,
     warmup: config.warmup ?? null,

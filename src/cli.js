@@ -20,6 +20,7 @@ Send HTTP requests to URL and report throughput and latency percentiles.
 Options:
   -n, --requests N     number of requests to send (default: 100 unless --duration is given)
       --warmup N|TIME  send N requests (or send for TIME) first and leave them out of the results
+      --rate N         send N requests per second at most, evenly spaced (default: as fast as possible)
       --timeout TIME   give up on a request after this long (default: 10s)
   -d, --duration TIME  send requests for this long, e.g. 10s or 1m (stops at -n if that comes first)
   -c, --concurrency N  requests in flight at a time (default: 10)
@@ -36,6 +37,7 @@ const OPTIONS = {
   requests: { type: "string", short: "n" },
   duration: { type: "string", short: "d" },
   timeout: { type: "string", default: "10s" },
+  rate: { type: "string" },
   warmup: { type: "string" },
   concurrency: { type: "string", short: "c", default: "10" },
   method: { type: "string", short: "X" },
@@ -106,6 +108,11 @@ export async function main(argv, io = {}) {
       throw new UsageError(`--timeout: ${error.message}`);
     }
     if (timeout === 0) throw new UsageError("--timeout must be longer than zero");
+    let rate;
+    if (values.rate !== undefined) {
+      rate = Number(values.rate);
+      if (!(rate > 0) || !Number.isFinite(rate)) throw new UsageError(`--rate must be a positive number of requests per second, got '${values.rate}'`);
+    }
     let request;
     try {
       request = buildRequest({
@@ -124,6 +131,7 @@ export async function main(argv, io = {}) {
       headers: request.headers,
       body: request.body,
       timeout,
+      rate,
       warmup,
       requests: values.requests !== undefined ? positiveInteger("requests", values.requests) : duration === undefined ? 100 : undefined,
       duration,

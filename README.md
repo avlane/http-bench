@@ -15,3 +15,5 @@ and cold caches don't distort the results.
 `--json` prints one JSON document instead of the text report, for scripts and for comparing
 runs. Header values that look like credentials (`Authorization`, `Cookie`, `X-Api-Key`) are
 replaced by `<redacted>` in the `config` section.
+`--rate 200` sends 200 requests per second at most, evenly spaced, which is how real clients behave;
+without it the tool sends the next request as soon as a response is in.

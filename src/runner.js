@@ -1,4 +1,5 @@
 import { performance } from "node:perf_hooks";
+import { setTimeout as sleep } from "node:timers/promises";
 
 /** A short name for why a request failed: a system error code, "timeout" or the error name. */
 export function describeError(error) {
@@ -7,9 +8,28 @@ export function describeError(error) {
 }
 
 /**
+ * A pacer for `rate` requests per second: each call reserves the next time slot, waits for it
+ * and returns the slot's time. Slots are reserved immediately, so concurrent callers queue up
+ * in order and a slow response doesn't shift the schedule of the next ones.
+ */
+export function createPacer(rate, { now = () => performance.now(), wait = sleep } = {}) {
+  const interval = 1000 / rate;
+  let next = null;
+  return async function pace() {
+    next = next === null ? now() : next + interval;
+    const scheduled = next;
+    const delay = scheduled - now();
+    if (delay > 0) await wait(delay);
+    return scheduled;
+  };
+}
+
+/**
  * Send requests with `concurrency` of them in flight at a time, until `requests` have been
  * sent or `duration` milliseconds have passed, whichever comes first. A request that
  * is already in flight when the time is up is allowed to finish.
+ * With `rate` (requests per second) the requests are spread evenly instead of being sent as
+ * fast as the responses allow; `concurrency` is then the maximum in flight.
  * With `warmup` ({requests} or {duration}) a first phase of that size runs before the
  * measured one and its samples are discarded.
  * A request that takes longer than `timeout` milliseconds is abandoned and counted as the
@@ -23,15 +43,20 @@ export async function run({ warmup, ...options }) {
   return runPhase(options);
 }
 
-async function runPhase({ url, requests, duration, concurrency, method = "GET", headers, body, timeout, fetchImpl = globalThis.fetch }) {
+async function runPhase({ url, requests, duration, concurrency, rate, method = "GET", headers, body, timeout, fetchImpl = globalThis.fetch }) {
   const samples = [];
   const limit = requests ?? Infinity;
+  const pace = rate ? createPacer(rate) : null;
   let issued = 0;
   const started = performance.now();
   const deadline = duration === undefined ? Infinity : started + duration;
   async function worker() {
     while (issued < limit && performance.now() < deadline) {
       issued += 1;
+      if (pace) {
+        await pace();
+        if (performance.now() >= deadline) break;
+      }
       const start = performance.now();
       try {
         const signal = timeout === undefined ? undefined : AbortSignal.timeout(timeout);

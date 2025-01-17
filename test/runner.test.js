@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
-import { describeError, run } from "../src/runner.js";
+import { createPacer, describeError, run } from "../src/runner.js";
 import { startServer } from "./server.js";
 
 let server;
@@ -100,6 +100,48 @@ describe("run", () => {
   it("records HTTP error statuses as responses", async () => {
     const { samples } = await run({ url: `${server.url}/status/503`, requests: 3, concurrency: 1 });
     assert.deepEqual(samples.map((s) => s.status), [503, 503, 503]);
+  });
+});
+
+describe("createPacer", () => {
+  it("hands out evenly spaced time slots and waits for each", async () => {
+    let clock = 1000;
+    const waits = [];
+    const pace = createPacer(4, { now: () => clock, wait: async (ms) => { waits.push(ms); clock += ms; } });
+    const slots = [await pace(), await pace(), await pace(), await pace()];
+    assert.deepEqual(slots, [1000, 1250, 1500, 1750]);
+    assert.deepEqual(waits, [250, 250, 250]);
+  });
+
+  it("reserves slots at once, so concurrent callers queue behind each other", async () => {
+    const clock = 0;
+    const pace = createPacer(10, { now: () => clock, wait: async () => {} });
+    const slots = await Promise.all([pace(), pace(), pace()]);
+    assert.deepEqual(slots, [0, 100, 200]);
+  });
+
+  it("does not wait for a slot that is already in the past", async () => {
+    let clock = 0;
+    const waits = [];
+    const pace = createPacer(10, { now: () => clock, wait: async (ms) => waits.push(ms) });
+    await pace();
+    clock = 5000; // the caller was busy for a long time
+    await pace();
+    assert.deepEqual(waits, []);
+  });
+});
+
+describe("run with a rate", () => {
+  it("spreads the requests out", async () => {
+    const { samples, elapsedMs } = await run({ url: `${server.url}/ok`, requests: 11, concurrency: 5, rate: 50 });
+    assert.equal(samples.length, 11);
+    assert.ok(elapsedMs >= 190 && elapsedMs < 1000, `11 requests at 50/s took ${elapsedMs} ms`);
+  });
+
+  it("does not send after the duration is over", async () => {
+    server.requests.length = 0;
+    await run({ url: `${server.url}/ok`, duration: 300, concurrency: 2, rate: 10 });
+    assert.ok(server.requests.length >= 2 && server.requests.length <= 4, `${server.requests.length} requests`);
   });
 });
 
