@@ -1,9 +1,8 @@
 import fs from "node:fs";
 import { parseArgs } from "node:util";
 
-import { parseDuration } from "./duration.js";
-import { buildRequest } from "./request.js";
 import { analyze } from "./analysis.js";
+import { HELP, OPTIONS, UsageError, buildConfig } from "./options.js";
 import { formatJson, formatText } from "./report.js";
 import { run } from "./runner.js";
 
@@ -12,49 +11,6 @@ const pkg = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.ur
 export const EXIT_OK = 0;
 export const EXIT_USAGE = 2;
 export const EXIT_NO_SUCCESS = 3; // the target was unreachable or every request failed
-
-const HELP = `Usage: http-bench [options] URL
-
-Send HTTP requests to URL and report throughput and latency percentiles.
-
-Options:
-  -n, --requests N     number of requests to send (default: 100 unless --duration is given)
-      --warmup N|TIME  send N requests (or send for TIME) first and leave them out of the results
-      --rate N         send N requests per second at most, evenly spaced (default: as fast as possible)
-      --timeout TIME   give up on a request after this long (default: 10s)
-  -d, --duration TIME  send requests for this long, e.g. 10s or 1m (stops at -n if that comes first)
-  -c, --concurrency N  requests in flight at a time (default: 10)
-  -X, --method METHOD  HTTP method (default: GET, or POST when there is a body)
-  -H, --header LINE    add a request header, "Name: value" (repeatable)
-  -b, --body TEXT      request body
-      --body-file FILE read the request body from FILE
-      --json           print the results as JSON instead of text
-  -h, --help           show this help
-  -v, --version        show the version
-`;
-
-const OPTIONS = {
-  requests: { type: "string", short: "n" },
-  duration: { type: "string", short: "d" },
-  timeout: { type: "string", default: "10s" },
-  rate: { type: "string" },
-  warmup: { type: "string" },
-  concurrency: { type: "string", short: "c", default: "10" },
-  method: { type: "string", short: "X" },
-  header: { type: "string", short: "H", multiple: true },
-  body: { type: "string", short: "b" },
-  "body-file": { type: "string" },
-  json: { type: "boolean" },
-  help: { type: "boolean", short: "h" },
-  version: { type: "boolean", short: "v" },
-};
-
-class UsageError extends Error {}
-
-function positiveInteger(name, text) {
-  if (!/^[1-9]\d*$/.test(text)) throw new UsageError(`--${name} must be a positive integer, got '${text}'`);
-  return Number(text);
-}
 
 export async function main(argv, io = {}) {
   const stdout = io.stdout ?? process.stdout;
@@ -75,68 +31,8 @@ export async function main(argv, io = {}) {
       stdout.write(`http-bench ${pkg.version}\n`);
       return EXIT_OK;
     }
-    if (positionals.length !== 1) throw new UsageError("expected exactly one URL");
-    let url;
-    try {
-      url = new URL(positionals[0]);
-    } catch {
-      throw new UsageError(`not a valid URL: ${positionals[0]}`);
-    }
-    if (url.protocol !== "http:" && url.protocol !== "https:") throw new UsageError(`unsupported protocol ${url.protocol} (use http or https)`);
 
-    let duration;
-    if (values.duration !== undefined) {
-      try {
-        duration = parseDuration(values.duration);
-      } catch (error) {
-        throw new UsageError(`--duration: ${error.message}`);
-      }
-      if (duration === 0) throw new UsageError("--duration must be longer than zero");
-    }
-    let warmup;
-    if (values.warmup !== undefined) {
-      try {
-        warmup = /^\d+$/.test(values.warmup) ? { requests: positiveInteger("warmup", values.warmup) } : { duration: parseDuration(values.warmup) };
-      } catch (error) {
-        throw error instanceof UsageError ? error : new UsageError(`--warmup: ${error.message} (a request count such as 50, or a duration such as 2s)`);
-      }
-    }
-    let timeout;
-    try {
-      timeout = parseDuration(values.timeout);
-    } catch (error) {
-      throw new UsageError(`--timeout: ${error.message}`);
-    }
-    if (timeout === 0) throw new UsageError("--timeout must be longer than zero");
-    let rate;
-    if (values.rate !== undefined) {
-      rate = Number(values.rate);
-      if (!(rate > 0) || !Number.isFinite(rate)) throw new UsageError(`--rate must be a positive number of requests per second, got '${values.rate}'`);
-    }
-    let request;
-    try {
-      request = buildRequest({
-        method: values.method,
-        headers: values.header,
-        body: values.body,
-        bodyFile: values["body-file"],
-        userAgent: `http-bench/${pkg.version}`,
-      });
-    } catch (error) {
-      throw new UsageError(error.message);
-    }
-    const config = {
-      url: url.href,
-      method: request.method,
-      headers: request.headers,
-      body: request.body,
-      timeout,
-      rate,
-      warmup,
-      requests: values.requests !== undefined ? positiveInteger("requests", values.requests) : duration === undefined ? 100 : undefined,
-      duration,
-      concurrency: positiveInteger("concurrency", values.concurrency),
-    };
+    const config = buildConfig(values, positionals);
     const result = await run({ ...config, fetchImpl: io.fetch });
     const analysis = analyze(result);
     stdout.write(values.json ? formatJson(config, analysis, pkg.version) : formatText(config, analysis));
