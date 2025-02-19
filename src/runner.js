@@ -1,6 +1,8 @@
 import { performance } from "node:perf_hooks";
 import { setTimeout as sleep } from "node:timers/promises";
 
+import { Recorder } from "./recorder.js";
+
 /** A short name for why a request failed: a system error code, "timeout" or the error name. */
 export function describeError(error) {
   if (error?.name === "TimeoutError") return "timeout";
@@ -31,9 +33,11 @@ export function createPacer(rate, { now = () => performance.now(), wait = sleep 
  * With `rate` (requests per second) the requests are spread evenly instead of being sent as
  * fast as the responses allow; `concurrency` is then the maximum in flight.
  * With `warmup` ({requests} or {duration}) a first phase of that size runs before the
- * measured one and its samples are discarded.
+ * measured one and its results are discarded.
  * A request that takes longer than `timeout` milliseconds is abandoned and counted as the
- * error "timeout". Returns one sample per request: {latency (ms), status} or {latency, error}.
+ * error "timeout".
+ *
+ * Returns `{recorder, elapsedMs}`; see Recorder for what is collected.
  */
 export async function run({ warmup, ...options }) {
   if (warmup) {
@@ -44,7 +48,7 @@ export async function run({ warmup, ...options }) {
 }
 
 async function runPhase({ url, requests, duration, concurrency, rate, method = "GET", headers, body, timeout, fetchImpl = globalThis.fetch }) {
-  const samples = [];
+  const recorder = new Recorder();
   const limit = requests ?? Infinity;
   const pace = rate ? createPacer(rate) : null;
   let issued = 0;
@@ -64,12 +68,12 @@ async function runPhase({ url, requests, duration, concurrency, rate, method = "
         // Read the whole body: the request is not finished before that, the connection can
         // only be reused afterwards, and the transferred bytes are part of the results.
         const content = await response.arrayBuffer();
-        samples.push({ latency: performance.now() - start, status: response.status, bytes: content.byteLength });
+        recorder.record({ latency: performance.now() - start, status: response.status, bytes: content.byteLength });
       } catch (error) {
-        samples.push({ latency: performance.now() - start, error: describeError(error) });
+        recorder.record({ error: describeError(error) });
       }
     }
   }
   await Promise.all(Array.from({ length: Math.min(concurrency, limit) }, worker));
-  return { samples, elapsedMs: performance.now() - started };
+  return { recorder, elapsedMs: performance.now() - started };
 }

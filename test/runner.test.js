@@ -11,45 +11,46 @@ after(() => server.close());
 describe("run", () => {
   it("sends exactly the requested number of requests and records status and latency", async () => {
     server.requests.length = 0;
-    const { samples, elapsedMs } = await run({ url: `${server.url}/ok`, requests: 25, concurrency: 5 });
-    assert.equal(samples.length, 25);
+    const { recorder, elapsedMs } = await run({ url: `${server.url}/ok`, requests: 25, concurrency: 5 });
+    assert.equal(recorder.requests, 25);
     assert.equal(server.requests.length, 25);
-    assert.ok(samples.every((s) => s.status === 200 && s.latency > 0));
+    assert.equal(recorder.statusCodes.get(200), 25);
+    assert.ok(recorder.histogram.min > 0);
     assert.ok(elapsedMs > 0);
   });
 
   it("stops sending when the duration is over and lets requests in flight finish", async () => {
     server.requests.length = 0;
-    const { samples, elapsedMs } = await run({ url: `${server.url}/slow?ms=20`, duration: 150, concurrency: 2 });
-    assert.ok(samples.length >= 6 && samples.length <= 18, `got ${samples.length} samples`);
-    assert.ok(samples.every((s) => s.status === 200));
+    const { recorder, elapsedMs } = await run({ url: `${server.url}/slow?ms=20`, duration: 150, concurrency: 2 });
+    assert.ok(recorder.requests >= 6 && recorder.requests <= 18, `got ${recorder.requests} requests`);
+    assert.equal(recorder.successes, recorder.requests);
     assert.ok(elapsedMs >= 150 && elapsedMs < 600, `took ${elapsedMs} ms`);
-    assert.equal(server.requests.length, samples.length);
+    assert.equal(server.requests.length, recorder.requests);
   });
 
   it("stops at the request count when that comes first", async () => {
-    const { samples } = await run({ url: `${server.url}/ok`, requests: 5, duration: 5000, concurrency: 2 });
-    assert.equal(samples.length, 5);
+    const { recorder } = await run({ url: `${server.url}/ok`, requests: 5, duration: 5000, concurrency: 2 });
+    assert.equal(recorder.requests, 5);
   });
 
-  it("sends warmup requests first and leaves them out of the samples", async () => {
+  it("sends warmup requests first and leaves them out of the results", async () => {
     server.requests.length = 0;
-    const { samples } = await run({ url: `${server.url}/ok`, requests: 10, concurrency: 2, warmup: { requests: 6 } });
-    assert.equal(samples.length, 10);
+    const { recorder } = await run({ url: `${server.url}/ok`, requests: 10, concurrency: 2, warmup: { requests: 6 } });
+    assert.equal(recorder.requests, 10);
     assert.equal(server.requests.length, 16);
   });
 
   it("a warmup can be a duration", async () => {
     server.requests.length = 0;
-    const { samples } = await run({ url: `${server.url}/slow?ms=10`, requests: 3, concurrency: 1, warmup: { duration: 60 } });
-    assert.equal(samples.length, 3);
+    const { recorder } = await run({ url: `${server.url}/slow?ms=10`, requests: 3, concurrency: 1, warmup: { duration: 60 } });
+    assert.equal(recorder.requests, 3);
     assert.ok(server.requests.length >= 3 + 3, `${server.requests.length} requests reached the server`);
   });
 
   it("does not use more workers than requests", async () => {
     server.requests.length = 0;
-    const { samples } = await run({ url: `${server.url}/ok`, requests: 3, concurrency: 50 });
-    assert.equal(samples.length, 3);
+    const { recorder } = await run({ url: `${server.url}/ok`, requests: 3, concurrency: 50 });
+    assert.equal(recorder.requests, 3);
   });
 
   it("never has more requests in flight than the concurrency", async () => {
@@ -62,44 +63,47 @@ describe("run", () => {
       active -= 1;
       return { status: 200, arrayBuffer: async () => new ArrayBuffer(0) };
     };
-    const { samples } = await run({ url: "http://example.invalid/", requests: 40, concurrency: 4, fetchImpl });
-    assert.equal(samples.length, 40);
+    const { recorder } = await run({ url: "http://example.invalid/", requests: 40, concurrency: 4, fetchImpl });
+    assert.equal(recorder.requests, 40);
     assert.equal(peak, 4);
   });
 
   it("abandons requests that exceed the timeout", async () => {
-    const { samples } = await run({ url: `${server.url}/slow?ms=500`, requests: 3, concurrency: 3, timeout: 40 });
-    assert.deepEqual(samples.map((s) => s.error), ["timeout", "timeout", "timeout"]);
-    assert.ok(samples.every((s) => s.latency >= 35 && s.latency < 300), JSON.stringify(samples));
+    const { recorder, elapsedMs } = await run({ url: `${server.url}/slow?ms=500`, requests: 3, concurrency: 3, timeout: 40 });
+    assert.deepEqual([...recorder.errorCounts], [["timeout", 3]]);
+    assert.equal(recorder.responses, 0);
+    assert.ok(elapsedMs >= 35 && elapsedMs < 300, `took ${elapsedMs} ms`);
   });
 
   it("does not time out requests that finish in time", async () => {
-    const { samples } = await run({ url: `${server.url}/slow?ms=10`, requests: 3, concurrency: 3, timeout: 2000 });
-    assert.deepEqual(samples.map((s) => s.status), [200, 200, 200]);
+    const { recorder } = await run({ url: `${server.url}/slow?ms=10`, requests: 3, concurrency: 3, timeout: 2000 });
+    assert.equal(recorder.statusCodes.get(200), 3);
   });
 
   it("measures until the whole body has arrived and counts the bytes", async () => {
-    const { samples } = await run({ url: `${server.url}/big?kb=64&ms=30`, requests: 2, concurrency: 1 });
-    for (const sample of samples) {
-      assert.equal(sample.bytes, 64 * 1024);
-      assert.ok(sample.latency >= 80, `latency ${sample.latency} ms is shorter than the time the body takes`);
-    }
+    const { recorder } = await run({ url: `${server.url}/big?kb=64&ms=30`, requests: 2, concurrency: 1 });
+    assert.equal(recorder.bytes, 2 * 64 * 1024);
+    assert.ok(recorder.histogram.min >= 80, `latency ${recorder.histogram.min} ms is shorter than the time the body takes`);
   });
 
   it("a body that is cut off is an error, not a success", async () => {
-    const { samples } = await run({ url: `${server.url}/big?kb=64&ms=200`, requests: 1, concurrency: 1, timeout: 100 });
-    assert.deepEqual(samples.map((s) => s.error), ["timeout"]);
+    const { recorder } = await run({ url: `${server.url}/big?kb=64&ms=200`, requests: 1, concurrency: 1, timeout: 100 });
+    assert.deepEqual([...recorder.errorCounts], [["timeout", 1]]);
+    assert.equal(recorder.responses, 0);
   });
 
   it("records failures as errors instead of throwing", async () => {
-    const { samples } = await run({ url: `${server.url}/drop`, requests: 4, concurrency: 2 });
-    assert.equal(samples.length, 4);
-    assert.ok(samples.every((s) => typeof s.error === "string" && s.status === undefined));
+    const { recorder } = await run({ url: `${server.url}/drop`, requests: 4, concurrency: 2 });
+    assert.equal(recorder.requests, 4);
+    assert.equal(recorder.responses, 0);
+    assert.equal([...recorder.errorCounts.values()].reduce((a, b) => a + b, 0), 4);
   });
 
   it("records HTTP error statuses as responses", async () => {
-    const { samples } = await run({ url: `${server.url}/status/503`, requests: 3, concurrency: 1 });
-    assert.deepEqual(samples.map((s) => s.status), [503, 503, 503]);
+    const { recorder } = await run({ url: `${server.url}/status/503`, requests: 3, concurrency: 1 });
+    assert.equal(recorder.statusCodes.get(503), 3);
+    assert.equal(recorder.errorCounts.get("HTTP 503"), 3);
+    assert.equal(recorder.successes, 0);
   });
 });
 
@@ -133,8 +137,8 @@ describe("createPacer", () => {
 
 describe("run with a rate", () => {
   it("spreads the requests out", async () => {
-    const { samples, elapsedMs } = await run({ url: `${server.url}/ok`, requests: 11, concurrency: 5, rate: 50 });
-    assert.equal(samples.length, 11);
+    const { recorder, elapsedMs } = await run({ url: `${server.url}/ok`, requests: 11, concurrency: 5, rate: 50 });
+    assert.equal(recorder.requests, 11);
     assert.ok(elapsedMs >= 190 && elapsedMs < 1000, `11 requests at 50/s took ${elapsedMs} ms`);
   });
 

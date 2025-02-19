@@ -1,15 +1,6 @@
-import { histogram, summarize } from "./stats.js";
-
 const SENSITIVE_HEADERS = new Set(["authorization", "proxy-authorization", "cookie", "x-api-key"]);
 
-function countBy(samples, key) {
-  const counts = new Map();
-  for (const sample of samples) {
-    const value = sample[key];
-    if (value !== undefined) counts.set(value, (counts.get(value) ?? 0) + 1);
-  }
-  return counts;
-}
+export const DEFAULT_PERCENTILES = [50, 75, 90, 95, 99, 99.9];
 
 /** The settings of a run as plain data, with credentials in headers hidden. */
 export function describeConfig(config) {
@@ -29,26 +20,32 @@ export function describeConfig(config) {
   };
 }
 
-/** Everything the reports need, computed once from the raw samples. */
-export function analyze({ samples, elapsedMs }) {
-  const responses = samples.filter((s) => s.error === undefined);
-  const latencies = responses.map((s) => s.latency);
-  const failedStatuses = responses.filter((s) => s.status >= 400).length;
+/** Everything the reports need, computed once from what the recorder collected. */
+export function analyze({ recorder, elapsedMs }, percentiles = DEFAULT_PERCENTILES) {
+  const histogram = recorder.histogram;
+  const latency = histogram.count === 0
+    ? { count: 0, min: null, max: null, mean: null, stddev: null, percentiles: {} }
+    : {
+        count: histogram.count,
+        min: histogram.min,
+        max: histogram.max,
+        mean: histogram.mean,
+        stddev: histogram.stddev,
+        percentiles: Object.fromEntries(percentiles.map((p) => [p, histogram.percentile(p)])),
+      };
   return {
-    requests: samples.length,
-    responses: responses.length,
+    requests: recorder.requests,
+    responses: recorder.responses,
+    successes: recorder.successes,
     // Failures are transport errors and HTTP error statuses (4xx, 5xx). Redirects are fine.
-    errors: samples.length - responses.length + failedStatuses,
-    successes: responses.length - failedStatuses,
-    statusCodes: Object.fromEntries([...countBy(responses, "status")].sort((a, b) => a[0] - b[0])),
+    errors: recorder.requests - recorder.successes,
+    statusCodes: Object.fromEntries([...recorder.statusCodes].sort((a, b) => a[0] - b[0])),
+    errorCounts: Object.fromEntries(recorder.errorCounts),
     elapsedMs,
-    bytes: responses.reduce((sum, s) => sum + (s.bytes ?? 0), 0),
-    requestsPerSecond: elapsedMs > 0 ? samples.length / (elapsedMs / 1000) : 0,
-    latency: summarize(latencies),
-    histogram: histogram(latencies),
-    errorCounts: {
-      ...Object.fromEntries(countBy(samples, "error")),
-      ...Object.fromEntries([...countBy(responses.filter((s) => s.status >= 400), "status")].map(([status, count]) => [`HTTP ${status}`, count])),
-    },
+    bytes: recorder.bytes,
+    requestsPerSecond: elapsedMs > 0 ? recorder.requests / (elapsedMs / 1000) : 0,
+    latency,
+    histogram: histogram.rows(),
+    percentile: (p) => histogram.percentile(p),
   };
 }
