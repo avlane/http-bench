@@ -17,3 +17,13 @@ runs. Header values that look like credentials (`Authorization`, `Cookie`, `X-Ap
 replaced by `<redacted>` in the `config` section.
 `--rate 200` sends 200 requests per second at most, evenly spaced, which is how real clients behave;
 without it the tool sends the next request as soon as a response is in.
+## Thresholds
+
+`--threshold` turns a run into a check: the exit status is 1 unless every expectation holds.
+
+    http-bench -d 30s -c 50 \
+      --threshold 'p99<250ms' --threshold 'errors<1%' --threshold 'rps>500' http://localhost:3000/
+
+Metrics: `min`, `mean`, `max`, `p50`...`p99.9` (latency, with a unit such as `250ms`), `rps` (requests
+per second) and `errors` (percentage of requests that failed). Exit status: 0 ok, 1 a threshold failed,
+2 usage error, 3 no request succeeded.

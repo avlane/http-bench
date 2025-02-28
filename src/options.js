@@ -2,6 +2,7 @@ import fs from "node:fs";
 
 import { parseDuration } from "./duration.js";
 import { buildRequest } from "./request.js";
+import { parseThreshold } from "./thresholds.js";
 
 const pkg = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 
@@ -22,6 +23,7 @@ Options:
       --rate N         send N requests per second at most, evenly spaced (default: as fast as possible)
       --warmup N|TIME  send N requests (or send for TIME) first and leave them out of the results
       --timeout TIME   give up on a request after this long (default: 10s)
+      --threshold EXPR  fail (exit 1) unless EXPR holds, e.g. p99<250ms, errors<1%, rps>500 (repeatable)
       --json           print the results as JSON instead of text
   -h, --help           show this help
   -v, --version        show the version
@@ -38,6 +40,7 @@ export const OPTIONS = {
   header: { type: "string", short: "H", multiple: true },
   body: { type: "string", short: "b" },
   "body-file": { type: "string" },
+  threshold: { type: "string", multiple: true },
   json: { type: "boolean" },
   help: { type: "boolean", short: "h" },
   version: { type: "boolean", short: "v" },
@@ -94,7 +97,14 @@ export function buildConfig(values, positionals) {
   } catch (error) {
     throw new UsageError(error.message);
   }
+  let thresholds;
+  try {
+    thresholds = (values.threshold ?? []).map(parseThreshold);
+  } catch (error) {
+    throw new UsageError(`--threshold: ${error.message}`);
+  }
   return {
+    thresholds,
     url: url.href,
     method: request.method,
     headers: request.headers,

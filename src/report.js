@@ -1,5 +1,6 @@
 import { describeConfig } from "./analysis.js";
 import { formatBytes, formatMs } from "./format.js";
+import { formatActual } from "./thresholds.js";
 
 const BAR_WIDTH = 30;
 
@@ -36,6 +37,10 @@ export function formatText(config, analysis) {
     lines.push(`  max   ${formatMs(latency.max)}`);
     lines.push("", "Histogram", ...histogramLines(analysis.histogram));
   }
+  if (analysis.thresholds?.length > 0) {
+    lines.push("", "Thresholds");
+    for (const result of analysis.thresholds) lines.push(`  ${result.passed ? "PASS" : "FAIL"}  ${result.expression}  (${formatActual(result)})`);
+  }
   return lines.join("\n") + "\n";
 }
 
@@ -65,6 +70,7 @@ export function formatJson(config, analysis, version) {
     histogram: analysis.histogram.map(({ from, to, count, tail }) => ({ fromMs: from, toMs: to, count, ...(tail ? { tail } : {}) })),
     statusCodes: analysis.statusCodes,
     errors: analysis.errorCounts,
+    thresholds: (analysis.thresholds ?? []).map(({ expression, actual, passed }) => ({ expression, actual, passed })),
   };
   return JSON.stringify(document, null, 2) + "\n";
 }

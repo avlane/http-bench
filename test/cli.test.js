@@ -202,6 +202,42 @@ describe("cli", () => {
     for (const bad of ["0", "-5", "fast", "Infinity"]) assert.equal((await run(["--rate", bad, server.url])).code, 2, bad);
   });
 
+  it("--threshold passes or fails the run", async () => {
+    const pass = await run(["-n", "20", "--threshold", "p99<5s", "--threshold", "errors<1%", `${server.url}/ok`]);
+    assert.equal(pass.code, 0);
+    assert.match(pass.stdout, /\nThresholds\n {2}PASS {2}p99<5s {2}\([\d.]+ m?s\)\n {2}PASS {2}errors<1% {2}\(0\.00%\)\n/);
+    const fail = await run(["-n", "20", "--threshold", "p50<0.001ms", "--threshold", "rps>1", `${server.url}/ok`]);
+    assert.equal(fail.code, 1);
+    assert.match(fail.stdout, /\n {2}FAIL {2}p50<0\.001ms/);
+    assert.match(fail.stdout, /\n {2}PASS {2}rps>1 /);
+  });
+
+  it("thresholds are part of the JSON report", async () => {
+    const { code, stdout } = await run(["--json", "-n", "10", "--threshold", "errors<1%", "--threshold", "max<0.001ms", `${server.url}/ok`]);
+    assert.equal(code, 1);
+    const doc = JSON.parse(stdout);
+    assert.deepEqual(doc.thresholds.map((t) => [t.expression, t.passed]), [["errors<1%", true], ["max<0.001ms", false]]);
+    assert.equal(doc.thresholds[0].actual, 0);
+  });
+
+  it("an error-rate threshold catches failing responses", async () => {
+    const { code } = await run(["-n", "6", "-c", "1", "--threshold", "errors<10%", `${server.url}/flaky`]);
+    assert.equal(code, 1);
+  });
+
+  it("exit 3 (nothing succeeded) wins over a failed threshold", async () => {
+    const { code } = await run(["-n", "3", "--threshold", "errors<1%", `${server.url}/drop`]);
+    assert.equal(code, 3);
+  });
+
+  it("rejects bad thresholds", async () => {
+    for (const bad of ["p99", "p99<fast", "speed<1ms"]) {
+      const { code, stderr } = await run(["--threshold", bad, server.url]);
+      assert.equal(code, 2, bad);
+      assert.match(stderr, /^http-bench: --threshold: invalid threshold/, bad);
+    }
+  });
+
   it("rejects bad durations", async () => {
     for (const bad of ["10", "fast", "0s"]) {
       const { code, stderr } = await run(["-d", bad, server.url]);
