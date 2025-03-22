@@ -31,7 +31,8 @@ export function createPacer(rate, { now = () => performance.now(), wait = sleep 
  * sent or `duration` milliseconds have passed, whichever comes first. A request that
  * is already in flight when the time is up is allowed to finish.
  * With `rate` (requests per second) the requests are spread evenly instead of being sent as
- * fast as the responses allow; `concurrency` is then the maximum in flight.
+ * fast as the responses allow; `concurrency` is then the maximum in flight, and latency is
+ * measured from the time a request was due, not from when a free worker got to send it.
  * With `warmup` ({requests} or {duration}) a first phase of that size runs before the
  * measured one and its results are discarded.
  * A request that takes longer than `timeout` milliseconds is abandoned and counted as the
@@ -57,11 +58,17 @@ async function runPhase({ url, requests, duration, concurrency, rate, method = "
   async function worker() {
     while (issued < limit && performance.now() < deadline) {
       issued += 1;
+      let start;
       if (pace) {
-        await pace();
+        // With a rate, a request is "due" at its time slot. If the previous responses were
+        // slow and it can only be sent later, that delay is part of what a client at that
+        // rate would have experienced - measuring from the actual send time would hide it
+        // (coordinated omission).
+        start = await pace();
         if (performance.now() >= deadline) break;
+      } else {
+        start = performance.now();
       }
-      const start = performance.now();
       try {
         const signal = timeout === undefined ? undefined : AbortSignal.timeout(timeout);
         const response = await fetchImpl(url, { method, headers, body, signal });

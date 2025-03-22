@@ -46,7 +46,7 @@ describe("cli", () => {
     assert.equal(doc.version, 1);
     assert.equal(doc.tool.name, "http-bench");
     assert.deepEqual(doc.config, {
-      url: `${server.url}/ok`, method: "GET", concurrency: 4, rate: null, requests: 40, durationMs: null, warmup: null,
+      url: `${server.url}/ok`, method: "GET", concurrency: 4, rate: null, latencyFrom: "sent", requests: 40, durationMs: null, warmup: null,
       timeoutMs: 10000, bodyBytes: 0,
       headers: { authorization: "<redacted>", "x-test": "1", "user-agent": doc.config.headers["user-agent"] },
     });
@@ -236,6 +236,15 @@ describe("cli", () => {
       assert.equal(code, 2, bad);
       assert.match(stderr, /^http-bench: --threshold: invalid threshold/, bad);
     }
+  });
+
+  it("says that latency is measured from the due time when a rate is set", async () => {
+    const withRate = await run(["-n", "3", "--rate", "100", `${server.url}/ok`]);
+    assert.match(withRate.stdout, /\nLatency \(from the time each request was due\)\n/);
+    const without = await run(["-n", "3", `${server.url}/ok`]);
+    assert.match(without.stdout, /\nLatency\n/);
+    const doc = JSON.parse((await run(["--json", "-n", "3", "--rate", "100", `${server.url}/ok`])).stdout);
+    assert.equal(doc.config.latencyFrom, "scheduled");
   });
 
   it("rejects bad durations", async () => {

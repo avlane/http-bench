@@ -11,6 +11,7 @@ export function describeConfig(config) {
     method: config.method,
     concurrency: config.concurrency,
     rate: config.rate ?? null,
+    latencyFrom: config.rate ? "scheduled" : "sent",
     requests: config.requests ?? null,
     durationMs: config.duration ?? null,
     warmup: config.warmup ?? null,

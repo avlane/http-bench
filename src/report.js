@@ -32,7 +32,7 @@ export function formatText(config, analysis) {
     lines.push("", "Status codes", ...statuses.map(([status, count]) => `  ${status}  ${count}`));
   }
   if (latency.count > 0) {
-    lines.push("", "Latency", `  min   ${formatMs(latency.min)}`, `  mean  ${formatMs(latency.mean)}`);
+    lines.push("", config.rate ? "Latency (from the time each request was due)" : "Latency", `  min   ${formatMs(latency.min)}`, `  mean  ${formatMs(latency.mean)}`);
     for (const [p, value] of Object.entries(latency.percentiles)) lines.push(`  p${p}`.padEnd(8) + formatMs(value));
     lines.push(`  max   ${formatMs(latency.max)}`);
     lines.push("", "Histogram", ...histogramLines(analysis.histogram));

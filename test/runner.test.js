@@ -149,6 +149,22 @@ describe("run with a rate", () => {
   });
 });
 
+describe("latency under a rate", () => {
+  it("includes the time a request waited because earlier responses were slow", async () => {
+    // One worker, a request due every 50 ms, but each response takes 100 ms: the schedule
+    // falls further behind with every request, and so does the latency.
+    const { recorder } = await run({ url: `${server.url}/slow?ms=100`, requests: 5, concurrency: 1, rate: 20 });
+    assert.equal(recorder.requests, 5);
+    assert.ok(recorder.histogram.min >= 95, `fastest ${recorder.histogram.min}`);
+    assert.ok(recorder.histogram.max >= 280, `the fifth request was due 200 ms before the first finished; slowest was ${recorder.histogram.max}`);
+  });
+
+  it("without a rate latency is just the response time", async () => {
+    const { recorder } = await run({ url: `${server.url}/slow?ms=60`, requests: 4, concurrency: 1 });
+    assert.ok(recorder.histogram.max < 200, `slowest ${recorder.histogram.max}`);
+  });
+});
+
 describe("describeError", () => {
   it("prefers the system error code of the cause", () => {
     const error = new TypeError("fetch failed", { cause: Object.assign(new Error("connect"), { code: "ECONNREFUSED" }) });
