@@ -38,18 +38,18 @@ export function createPacer(rate, { now = () => performance.now(), wait = sleep 
  * A request that takes longer than `timeout` milliseconds is abandoned and counted as the
  * error "timeout".
  *
- * Returns `{recorder, elapsedMs}`; see Recorder for what is collected.
+ * Results go to `recorder` (a new one by default), which may be watched while the run is in
+ * progress. Returns `{recorder, elapsedMs}`; see Recorder for what is collected.
  */
-export async function run({ warmup, ...options }) {
+export async function run({ warmup, recorder = new Recorder(), ...options }) {
   if (warmup) {
     // Connections, DNS and server caches get warm; none of this is measured.
-    await runPhase({ ...options, requests: warmup.requests, duration: warmup.duration });
+    await runPhase({ ...options, requests: warmup.requests, duration: warmup.duration }, new Recorder());
   }
-  return runPhase(options);
+  return runPhase(options, recorder);
 }
 
-async function runPhase({ url, requests, duration, concurrency, rate, method = "GET", headers, body, timeout, fetchImpl = globalThis.fetch }) {
-  const recorder = new Recorder();
+async function runPhase({ url, requests, duration, concurrency, rate, method = "GET", headers, body, timeout, fetchImpl = globalThis.fetch }, recorder) {
   const limit = requests ?? Infinity;
   const pace = rate ? createPacer(rate) : null;
   let issued = 0;

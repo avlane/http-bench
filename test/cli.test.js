@@ -247,6 +247,17 @@ describe("cli", () => {
     assert.equal(doc.config.latencyFrom, "scheduled");
   });
 
+  it("--progress writes a live line to stderr and leaves stdout alone", async () => {
+    const { io, out } = capture();
+    const code = await main(["--progress", "--json", "-d", "250ms", "-c", "2", `${server.url}/slow?ms=20`], { ...io, progressIntervalMs: 20 });
+    assert.equal(code, 0);
+    JSON.parse(out.stdout);
+    assert.match(out.stderr, /\r +\d+\.\d s +\d+ requests/);
+    assert.ok(out.stderr.endsWith("\r\x1b[K"));
+    const quiet = await run(["-n", "3", `${server.url}/ok`]);
+    assert.equal(quiet.stderr, "");
+  });
+
   it("rejects bad durations", async () => {
     for (const bad of ["10", "fast", "0s"]) {
       const { code, stderr } = await run(["-d", bad, server.url]);

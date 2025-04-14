@@ -24,6 +24,7 @@ Options:
       --warmup N|TIME  send N requests (or send for TIME) first and leave them out of the results
       --timeout TIME   give up on a request after this long (default: 10s)
       --threshold EXPR  fail (exit 1) unless EXPR holds, e.g. p99<250ms, errors<1%, rps>500 (repeatable)
+      --progress       show a live status line on stderr while the run is in progress
       --json           print the results as JSON instead of text
   -h, --help           show this help
   -v, --version        show the version
@@ -41,6 +42,7 @@ export const OPTIONS = {
   body: { type: "string", short: "b" },
   "body-file": { type: "string" },
   threshold: { type: "string", multiple: true },
+  progress: { type: "boolean" },
   json: { type: "boolean" },
   help: { type: "boolean", short: "h" },
   version: { type: "boolean", short: "v" },

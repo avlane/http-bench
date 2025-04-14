@@ -2,6 +2,8 @@ import fs from "node:fs";
 import { parseArgs } from "node:util";
 
 import { analyze } from "./analysis.js";
+import { startProgress } from "./progress.js";
+import { Recorder } from "./recorder.js";
 import { HELP, OPTIONS, UsageError, buildConfig } from "./options.js";
 import { evaluateThresholds } from "./thresholds.js";
 import { formatJson, formatText } from "./report.js";
@@ -35,7 +37,14 @@ export async function main(argv, io = {}) {
     }
 
     const config = buildConfig(values, positionals);
-    const result = await run({ ...config, fetchImpl: io.fetch });
+    const recorder = new Recorder();
+    const stopProgress = values.progress ? startProgress(recorder, stderr, { intervalMs: io.progressIntervalMs }) : () => {};
+    let result;
+    try {
+      result = await run({ ...config, recorder, fetchImpl: io.fetch });
+    } finally {
+      stopProgress();
+    }
     const analysis = analyze(result);
     analysis.thresholds = evaluateThresholds(config.thresholds, analysis);
     stdout.write(values.json ? formatJson(config, analysis, pkg.version) : formatText(config, analysis));
