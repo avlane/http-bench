@@ -149,6 +149,38 @@ describe("run with a rate", () => {
   });
 });
 
+describe("cancelling a run", () => {
+  it("stops sending, abandons requests in flight and reports what was measured", async () => {
+    server.requests.length = 0;
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 120);
+    const started = performance.now();
+    const { recorder, interrupted } = await run({ url: `${server.url}/slow?ms=40`, duration: 60_000, concurrency: 2, signal: controller.signal });
+    assert.equal(interrupted, true);
+    assert.ok(performance.now() - started < 1000, "the run did not stop");
+    assert.ok(recorder.requests >= 2 && recorder.requests <= 8, `${recorder.requests} requests`);
+    assert.equal(recorder.errorCounts.size, 0, "abandoned requests must not be counted as errors");
+  });
+
+  it("an already cancelled run sends nothing", async () => {
+    server.requests.length = 0;
+    const { recorder, interrupted } = await run({ url: `${server.url}/ok`, requests: 10, concurrency: 2, signal: AbortSignal.abort() });
+    assert.equal(recorder.requests, 0);
+    assert.equal(interrupted, true);
+    assert.equal(server.requests.length, 0);
+  });
+
+  it("a run that was not cancelled is not interrupted", async () => {
+    const { interrupted } = await run({ url: `${server.url}/ok`, requests: 2, concurrency: 1, signal: new AbortController().signal });
+    assert.equal(interrupted, false);
+  });
+
+  it("timeouts still work next to a cancel signal", async () => {
+    const { recorder } = await run({ url: `${server.url}/slow?ms=300`, requests: 1, concurrency: 1, timeout: 30, signal: new AbortController().signal });
+    assert.deepEqual([...recorder.errorCounts], [["timeout", 1]]);
+  });
+});
+
 describe("latency under a rate", () => {
   it("includes the time a request waited because earlier responses were slow", async () => {
     // One worker, a request due every 50 ms, but each response takes 100 ms: the schedule

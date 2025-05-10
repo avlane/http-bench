@@ -40,7 +40,7 @@ export function analyze({ recorder, elapsedMs }, percentiles = DEFAULT_PERCENTIL
     successes: recorder.successes,
     // Failures are transport errors and HTTP error statuses (4xx, 5xx). Redirects are fine.
     errors: recorder.requests - recorder.successes,
-    statusCodes: Object.fromEntries([...recorder.statusCodes].sort((a, b) => a[0] - b[0])),
+    statusCodes: Object.fromEntries([...recorder.statusCodes].toSorted((a, b) => a[0] - b[0])),
     errorCounts: Object.fromEntries(recorder.errorCounts),
     elapsedMs,
     bytes: recorder.bytes,

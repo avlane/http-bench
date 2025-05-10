@@ -38,25 +38,27 @@ export function createPacer(rate, { now = () => performance.now(), wait = sleep 
  * A request that takes longer than `timeout` milliseconds is abandoned and counted as the
  * error "timeout".
  *
+ * A `signal` (AbortSignal) cancels the run: nothing new is sent, requests in flight are abandoned
+ * without being counted, and the result has `interrupted: true`.
  * Results go to `recorder` (a new one by default), which may be watched while the run is in
  * progress. Returns `{recorder, elapsedMs}`; see Recorder for what is collected.
  */
-export async function run({ warmup, recorder = new Recorder(), ...options }) {
+export async function run({ warmup, recorder = new Recorder(), signal, ...options }) {
   if (warmup) {
     // Connections, DNS and server caches get warm; none of this is measured.
-    await runPhase({ ...options, requests: warmup.requests, duration: warmup.duration }, new Recorder());
+    await runPhase({ ...options, requests: warmup.requests, duration: warmup.duration, signal }, new Recorder());
   }
-  return runPhase(options, recorder);
+  return runPhase({ ...options, signal }, recorder);
 }
 
-async function runPhase({ url, requests, duration, concurrency, rate, method = "GET", headers, body, timeout, fetchImpl = globalThis.fetch }, recorder) {
+async function runPhase({ url, requests, duration, concurrency, rate, method = "GET", headers, body, timeout, signal: stop, fetchImpl = globalThis.fetch }, recorder) {
   const limit = requests ?? Infinity;
   const pace = rate ? createPacer(rate) : null;
   let issued = 0;
   const started = performance.now();
   const deadline = duration === undefined ? Infinity : started + duration;
   async function worker() {
-    while (issued < limit && performance.now() < deadline) {
+    while (issued < limit && performance.now() < deadline && !stop?.aborted) {
       issued += 1;
       let start;
       if (pace) {
@@ -65,22 +67,24 @@ async function runPhase({ url, requests, duration, concurrency, rate, method = "
         // rate would have experienced - measuring from the actual send time would hide it
         // (coordinated omission).
         start = await pace();
-        if (performance.now() >= deadline) break;
+        if (performance.now() >= deadline || stop?.aborted) break;
       } else {
         start = performance.now();
       }
       try {
-        const signal = timeout === undefined ? undefined : AbortSignal.timeout(timeout);
+        const signals = [timeout === undefined ? null : AbortSignal.timeout(timeout), stop ?? null].filter(Boolean);
+        const signal = signals.length > 1 ? AbortSignal.any(signals) : signals[0];
         const response = await fetchImpl(url, { method, headers, body, signal });
         // Read the whole body: the request is not finished before that, the connection can
         // only be reused afterwards, and the transferred bytes are part of the results.
         const content = await response.arrayBuffer();
         recorder.record({ latency: performance.now() - start, status: response.status, bytes: content.byteLength });
       } catch (error) {
+        if (stop?.aborted) break; // cancelled by the caller: not a result
         recorder.record({ error: describeError(error) });
       }
     }
   }
   await Promise.all(Array.from({ length: Math.min(concurrency, limit) }, worker));
-  return { recorder, elapsedMs: performance.now() - started };
+  return { recorder, elapsedMs: performance.now() - started, interrupted: Boolean(stop?.aborted) };
 }
