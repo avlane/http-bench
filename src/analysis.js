@@ -6,7 +6,11 @@ export const DEFAULT_PERCENTILES = [50, 75, 90, 95, 99, 99.9];
 export function describeConfig(config) {
   const headers = {};
   for (const [name, value] of config.headers ?? []) headers[name] = SENSITIVE_HEADERS.has(name) ? "<redacted>" : value;
+  const targets = config.targets?.length > 1
+    ? { targets: config.targets.map((t) => ({ method: t.method, url: t.url, bodyBytes: t.body === undefined ? 0 : Buffer.byteLength(t.body) })) }
+    : {};
   return {
+    ...targets,
     url: config.url,
     method: config.method,
     concurrency: config.concurrency,

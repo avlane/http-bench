@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { after, before, describe, it } from "node:test";
 
 import { main } from "../src/cli.js";
@@ -8,6 +11,13 @@ import { closedPort, startServer } from "./server.js";
 let server;
 before(async () => { server = await startServer(); });
 after(() => server.close());
+
+function tempFile(contents) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "http-bench-"));
+  const file = path.join(dir, "requests.json");
+  fs.writeFileSync(file, contents);
+  return { dir: file, cleanup: () => fs.rmSync(dir, { recursive: true, force: true }) };
+}
 
 async function run(args) {
   const { io, out } = capture();
@@ -256,6 +266,60 @@ describe("cli", () => {
     assert.ok(out.stderr.endsWith("\r\x1b[K"));
     const quiet = await run(["-n", "3", `${server.url}/ok`]);
     assert.equal(quiet.stderr, "");
+  });
+
+  it("--requests-file sends the described requests in turn", async () => {
+    const { dir, cleanup } = tempFile([
+      JSON.stringify({ url: "/ok" }),
+      JSON.stringify({ url: "/echo", method: "POST", json: { n: 1 }, headers: { "X-Kind": "file" } }),
+    ].join("\n"));
+    try {
+      server.requests.length = 0;
+      const { code, stdout } = await run(["--requests-file", dir, "-n", "6", "-c", "1", "-H", "X-Run: all", server.url]);
+      assert.equal(code, 0);
+      assert.deepEqual(server.requests.map((r) => `${r.method} ${r.path}`), ["GET /ok", "POST /echo", "GET /ok", "POST /echo", "GET /ok", "POST /echo"]);
+      const echo = server.requests[1];
+      assert.equal(echo.headers["x-kind"], "file");
+      assert.equal(echo.headers["x-run"], "all");
+      assert.equal(echo.headers["content-type"], "application/json");
+      assert.equal(echo.body.toString(), '{"n":1}');
+      assert.match(stdout, new RegExp(`^2 requests in turn:\\n  GET ${server.url}/ok\\n  POST ${server.url}/echo\\n6 requests in`));
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("--requests-file needs absolute URLs without a base, and conflicts with --body", async () => {
+    const { dir, cleanup } = tempFile(JSON.stringify([{ url: `${server.url}/ok` }]));
+    try {
+      assert.equal((await run(["--requests-file", dir, "-n", "2"])).code, 0);
+      const withBody = await run(["--requests-file", dir, "-b", "x"]);
+      assert.equal(withBody.code, 2);
+      assert.match(withBody.stderr, /cannot be combined with --requests-file/);
+      const relative = tempFile(JSON.stringify([{ url: "/ok" }]));
+      try {
+        const missingBase = await run(["--requests-file", relative.dir]);
+        assert.equal(missingBase.code, 2);
+        assert.match(missingBase.stderr, /give a base URL/);
+      } finally {
+        relative.cleanup();
+      }
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("lists the requests in the JSON config", async () => {
+    const { dir, cleanup } = tempFile(JSON.stringify([{ url: "/ok" }, { url: "/created", method: "POST", body: "abc" }]));
+    try {
+      const doc = JSON.parse((await run(["--json", "--requests-file", dir, "-n", "2", server.url])).stdout);
+      assert.deepEqual(doc.config.targets, [
+        { method: "GET", url: `${server.url}/ok`, bodyBytes: 0 },
+        { method: "POST", url: `${server.url}/created`, bodyBytes: 3 },
+      ]);
+    } finally {
+      cleanup();
+    }
   });
 
   it("rejects bad durations", async () => {

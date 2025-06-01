@@ -37,6 +37,7 @@ export async function startServer() {
         res.end(text);
       };
       if (url.pathname === "/ok") return send(200, "ok");
+      if (url.pathname === "/created") return send(201, "created");
       if (url.pathname.startsWith("/status/")) return send(Number(url.pathname.split("/")[2]), "status");
       if (url.pathname === "/slow") return void setTimeout(() => send(200, "slow"), Number(url.searchParams.get("ms") ?? 50));
       if (url.pathname === "/big") {

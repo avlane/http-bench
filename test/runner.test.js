@@ -19,6 +19,14 @@ describe("run", () => {
     assert.ok(elapsedMs > 0);
   });
 
+  it("sends the targets in turn", async () => {
+    server.requests.length = 0;
+    const targets = ["/ok", "/created", "/status/404"].map((p) => ({ url: `${server.url}${p}`, method: "GET" }));
+    const { recorder } = await run({ targets, requests: 9, concurrency: 1 });
+    assert.deepEqual(server.requests.map((r) => r.path), ["/ok", "/created", "/status/404", "/ok", "/created", "/status/404", "/ok", "/created", "/status/404"]);
+    assert.deepEqual([...recorder.statusCodes], [[200, 3], [201, 3], [404, 3]]);
+  });
+
   it("stops sending when the duration is over and lets requests in flight finish", async () => {
     server.requests.length = 0;
     const { recorder, elapsedMs } = await run({ url: `${server.url}/slow?ms=20`, duration: 150, concurrency: 2 });

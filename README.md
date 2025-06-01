@@ -27,3 +27,13 @@ without it the tool sends the next request as soon as a response is in.
 Metrics: `min`, `mean`, `max`, `p50`...`p99.9` (latency, with a unit such as `250ms`), `rps` (requests
 per second) and `errors` (percentage of requests that failed). Exit status: 0 ok, 1 a threshold failed,
 2 usage error, 3 no request succeeded.
+## Several requests
+
+`--requests-file requests.json` sends a list of requests in turn - a JSON array or one JSON object
+per line:
+
+    {"url": "/items"}
+    {"url": "/items", "method": "POST", "json": {"name": "widget"}}
+    {"url": "/items/7", "method": "PUT", "headers": {"X-Trace": "on"}, "body": "raw body"}
+
+URLs may be relative to the URL given on the command line. `-H` headers apply to every request.

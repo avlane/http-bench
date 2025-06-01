@@ -17,8 +17,11 @@ function histogramLines(rows) {
 
 export function formatText(config, analysis) {
   const { latency } = analysis;
+  const targets = config.targets ?? [];
   const lines = [
-    `${config.method} ${config.url}`,
+    ...(targets.length > 1
+      ? [`${targets.length} requests in turn:`, ...targets.slice(0, 5).map((t) => `  ${t.method} ${t.url}`), ...(targets.length > 5 ? [`  ... and ${targets.length - 5} more`] : [])]
+      : [`${config.method} ${config.url}`]),
     `${analysis.requests} requests in ${(analysis.elapsedMs / 1000).toFixed(2)} s with concurrency ${config.concurrency}`,
     `${analysis.requestsPerSecond.toFixed(1)} requests/s`,
     `${formatBytes(analysis.bytes)} received (${formatBytes(analysis.bytes / (analysis.elapsedMs / 1000))}/s)`,

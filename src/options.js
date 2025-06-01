@@ -2,6 +2,7 @@ import fs from "node:fs";
 
 import { parseDuration } from "./duration.js";
 import { buildRequest } from "./request.js";
+import { loadRequestsFile } from "./scenario.js";
 import { parseThreshold } from "./thresholds.js";
 
 const pkg = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8"));
@@ -9,6 +10,7 @@ const pkg = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.ur
 export class UsageError extends Error {}
 
 export const HELP = `Usage: http-bench [options] URL
+       http-bench [options] --requests-file FILE [BASE_URL]
 
 Send HTTP requests to URL and report throughput and latency percentiles.
 
@@ -20,6 +22,8 @@ Options:
   -H, --header LINE    add a request header, "Name: value" (repeatable)
   -b, --body TEXT      request body
       --body-file FILE read the request body from FILE
+      --requests-file FILE  send the requests described in FILE (a JSON array or JSON Lines),
+                       in turn; URLs may be relative to BASE_URL
       --rate N         send N requests per second at most, evenly spaced (default: as fast as possible)
       --warmup N|TIME  send N requests (or send for TIME) first and leave them out of the results
       --timeout TIME   give up on a request after this long (default: 10s)
@@ -41,6 +45,7 @@ export const OPTIONS = {
   header: { type: "string", short: "H", multiple: true },
   body: { type: "string", short: "b" },
   "body-file": { type: "string" },
+  "requests-file": { type: "string" },
   threshold: { type: "string", multiple: true },
   progress: { type: "boolean" },
   json: { type: "boolean" },
@@ -64,16 +69,22 @@ function positiveDuration(name, text) {
   return ms;
 }
 
-/** Validate the parsed command line and turn it into the settings of a run. */
-export function buildConfig(values, positionals) {
-  if (positionals.length !== 1) throw new UsageError("expected exactly one URL");
+function parseBaseUrl(text) {
   let url;
   try {
-    url = new URL(positionals[0]);
+    url = new URL(text);
   } catch {
-    throw new UsageError(`not a valid URL: ${positionals[0]}`);
+    throw new UsageError(`not a valid URL: ${text}`);
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") throw new UsageError(`unsupported protocol ${url.protocol} (use http or https)`);
+  return url;
+}
+
+/** Validate the parsed command line and turn it into the settings of a run. */
+export function buildConfig(values, positionals) {
+  const requestsFile = values["requests-file"];
+  if (positionals.length > 1 || (positionals.length === 0 && requestsFile === undefined)) throw new UsageError("expected exactly one URL");
+  const baseUrl = positionals.length === 1 ? parseBaseUrl(positionals[0]) : undefined;
 
   const duration = values.duration === undefined ? undefined : positiveDuration("duration", values.duration);
   let warmup;
@@ -87,15 +98,18 @@ export function buildConfig(values, positionals) {
     rate = Number(values.rate);
     if (!(rate > 0) || !Number.isFinite(rate)) throw new UsageError(`--rate must be a positive number of requests per second, got '${values.rate}'`);
   }
-  let request;
+  const userAgent = `http-bench/${pkg.version}`;
+  let targets;
   try {
-    request = buildRequest({
-      method: values.method,
-      headers: values.header,
-      body: values.body,
-      bodyFile: values["body-file"],
-      userAgent: `http-bench/${pkg.version}`,
-    });
+    if (requestsFile !== undefined) {
+      if (values.body !== undefined || values["body-file"] !== undefined) {
+        throw new Error("--body and --body-file cannot be combined with --requests-file; put the bodies in the file");
+      }
+      targets = loadRequestsFile(requestsFile, { baseUrl, headers: values.header ?? [], method: values.method, userAgent });
+    } else {
+      const request = buildRequest({ method: values.method, headers: values.header, body: values.body, bodyFile: values["body-file"], userAgent });
+      targets = [{ url: baseUrl.href, method: request.method, headers: request.headers, body: request.body }];
+    }
   } catch (error) {
     throw new UsageError(error.message);
   }
@@ -107,10 +121,11 @@ export function buildConfig(values, positionals) {
   }
   return {
     thresholds,
-    url: url.href,
-    method: request.method,
-    headers: request.headers,
-    body: request.body,
+    targets,
+    url: targets[0].url,
+    method: targets[0].method,
+    headers: targets[0].headers,
+    body: targets[0].body,
     timeout: positiveDuration("timeout", values.timeout),
     rate,
     warmup,

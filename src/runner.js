@@ -30,6 +30,8 @@ export function createPacer(rate, { now = () => performance.now(), wait = sleep 
  * Send requests with `concurrency` of them in flight at a time, until `requests` have been
  * sent or `duration` milliseconds have passed, whichever comes first. A request that
  * is already in flight when the time is up is allowed to finish.
+ * `targets` ([{url, method, headers, body}]) are sent in turn; a single `url` is a short way of
+ * giving one target.
  * With `rate` (requests per second) the requests are spread evenly instead of being sent as
  * fast as the responses allow; `concurrency` is then the maximum in flight, and latency is
  * measured from the time a request was due, not from when a free worker got to send it.
@@ -51,7 +53,8 @@ export async function run({ warmup, recorder = new Recorder(), signal, ...option
   return runPhase({ ...options, signal }, recorder);
 }
 
-async function runPhase({ url, requests, duration, concurrency, rate, method = "GET", headers, body, timeout, signal: stop, fetchImpl = globalThis.fetch }, recorder) {
+async function runPhase({ targets, url, requests, duration, concurrency, rate, method = "GET", headers, body, timeout, signal: stop, fetchImpl = globalThis.fetch }, recorder) {
+  const list = targets ?? [{ url, method, headers, body }];
   const limit = requests ?? Infinity;
   const pace = rate ? createPacer(rate) : null;
   let issued = 0;
@@ -60,6 +63,7 @@ async function runPhase({ url, requests, duration, concurrency, rate, method = "
   async function worker() {
     while (issued < limit && performance.now() < deadline && !stop?.aborted) {
       issued += 1;
+      const target = list[(issued - 1) % list.length];
       let start;
       if (pace) {
         // With a rate, a request is "due" at its time slot. If the previous responses were
@@ -74,7 +78,7 @@ async function runPhase({ url, requests, duration, concurrency, rate, method = "
       try {
         const signals = [timeout === undefined ? null : AbortSignal.timeout(timeout), stop ?? null].filter(Boolean);
         const signal = signals.length > 1 ? AbortSignal.any(signals) : signals[0];
-        const response = await fetchImpl(url, { method, headers, body, signal });
+        const response = await fetchImpl(target.url, { method: target.method, headers: target.headers, body: target.body, signal });
         // Read the whole body: the request is not finished before that, the connection can
         // only be reused afterwards, and the transferred bytes are part of the results.
         const content = await response.arrayBuffer();
