@@ -29,6 +29,16 @@ describe("Recorder", () => {
     assert.equal(recorder.histogram.count, 0);
   });
 
+  it("a negative latency (from a timer that fired early) counts as zero", () => {
+    const recorder = new Recorder();
+    recorder.record({ latency: -0.4, status: 200 });
+    recorder.record({ latency: 3, status: 200 });
+    assert.equal(recorder.requests, 2);
+    assert.equal(recorder.successes, 2);
+    assert.equal(recorder.histogram.min, 0);
+    assert.equal(recorder.errorCounts.size, 0);
+  });
+
   it("redirects are successes", () => {
     const recorder = new Recorder();
     recorder.record({ latency: 1, status: 302 });

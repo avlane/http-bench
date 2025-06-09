@@ -29,7 +29,7 @@ export class Recorder {
     this.responses += 1;
     this.bytes += bytes;
     this.#increment(this.statusCodes, status);
-    this.histogram.record(latency);
+    this.histogram.record(Math.max(0, latency));
     if (status >= 400) this.#increment(this.errorCounts, `HTTP ${status}`);
     else this.successes += 1;
   }

@@ -75,6 +75,7 @@ async function runPhase({ targets, url, requests, duration, concurrency, rate, m
       } else {
         start = performance.now();
       }
+      let outcome;
       try {
         const signals = [timeout === undefined ? null : AbortSignal.timeout(timeout), stop ?? null].filter(Boolean);
         const signal = signals.length > 1 ? AbortSignal.any(signals) : signals[0];
@@ -82,11 +83,14 @@ async function runPhase({ targets, url, requests, duration, concurrency, rate, m
         // Read the whole body: the request is not finished before that, the connection can
         // only be reused afterwards, and the transferred bytes are part of the results.
         const content = await response.arrayBuffer();
-        recorder.record({ latency: performance.now() - start, status: response.status, bytes: content.byteLength });
+        // A timer can fire a little early, so a very fast response can finish before the time
+        // slot it was due in; that is a latency of zero, not a negative one.
+        outcome = { latency: Math.max(0, performance.now() - start), status: response.status, bytes: content.byteLength };
       } catch (error) {
         if (stop?.aborted) break; // cancelled by the caller: not a result
-        recorder.record({ error: describeError(error) });
+        outcome = { error: describeError(error) };
       }
+      recorder.record(outcome);
     }
   }
   await Promise.all(Array.from({ length: Math.min(concurrency, limit) }, worker));
