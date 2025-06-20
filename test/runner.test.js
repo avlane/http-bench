@@ -27,6 +27,18 @@ describe("run", () => {
     assert.deepEqual([...recorder.statusCodes], [[200, 3], [201, 3], [404, 3]]);
   });
 
+  it("follows redirects by default and can leave them alone", async () => {
+    server.requests.length = 0;
+    const followed = await run({ url: `${server.url}/redirect?to=/created`, requests: 2, concurrency: 1 });
+    assert.deepEqual([...followed.recorder.statusCodes], [[201, 2]]);
+    assert.equal(server.requests.length, 4); // each request needed two round trips
+    server.requests.length = 0;
+    const manual = await run({ url: `${server.url}/redirect?to=/created`, requests: 2, concurrency: 1, redirect: "manual" });
+    assert.deepEqual([...manual.recorder.statusCodes], [[302, 2]]);
+    assert.equal(manual.recorder.successes, 2);
+    assert.equal(server.requests.length, 2);
+  });
+
   it("stops sending when the duration is over and lets requests in flight finish", async () => {
     server.requests.length = 0;
     const { recorder, elapsedMs } = await run({ url: `${server.url}/slow?ms=20`, duration: 150, concurrency: 2 });

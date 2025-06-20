@@ -56,7 +56,7 @@ describe("cli", () => {
     assert.equal(doc.version, 1);
     assert.equal(doc.tool.name, "http-bench");
     assert.deepEqual(doc.config, {
-      url: `${server.url}/ok`, method: "GET", concurrency: 4, rate: null, latencyFrom: "sent", requests: 40, durationMs: null, warmup: null,
+      url: `${server.url}/ok`, method: "GET", concurrency: 4, rate: null, latencyFrom: "sent", redirect: "follow", requests: 40, durationMs: null, warmup: null,
       timeoutMs: 10000, bodyBytes: 0,
       headers: { authorization: "<redacted>", "x-test": "1", "user-agent": doc.config.headers["user-agent"] },
     });
@@ -320,6 +320,19 @@ describe("cli", () => {
     } finally {
       cleanup();
     }
+  });
+
+  it("--redirect manual reports the redirect itself", async () => {
+    const followed = await run(["--json", "-n", "3", `${server.url}/redirect`]);
+    assert.deepEqual(JSON.parse(followed.stdout).statusCodes, { 200: 3 });
+    const manual = await run(["--json", "-n", "3", "--redirect", "manual", `${server.url}/redirect`]);
+    const doc = JSON.parse(manual.stdout);
+    assert.deepEqual(doc.statusCodes, { 302: 3 });
+    assert.equal(doc.config.redirect, "manual");
+    assert.equal(manual.code, 0);
+    const bad = await run(["--redirect", "error", server.url]);
+    assert.equal(bad.code, 2);
+    assert.match(bad.stderr, /--redirect must be 'follow' or 'manual'/);
   });
 
   it("rejects bad durations", async () => {

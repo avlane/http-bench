@@ -13,6 +13,7 @@ export async function closedPort() {
  * A small HTTP server for the tests, listening on a random local port.
  *
  *   /ok               200 "ok"
+ *   /redirect?to=P    302 to the path P (default /ok)
  *   /status/CODE      the given status
  *   /slow?ms=N        200 after N milliseconds
  *   /echo             JSON with the method, headers and body of the request
@@ -37,6 +38,7 @@ export async function startServer() {
         res.end(text);
       };
       if (url.pathname === "/ok") return send(200, "ok");
+      if (url.pathname === "/redirect") return send(302, "moved", { location: url.searchParams.get("to") ?? "/ok" });
       if (url.pathname === "/created") return send(201, "created");
       if (url.pathname.startsWith("/status/")) return send(Number(url.pathname.split("/")[2]), "status");
       if (url.pathname === "/slow") return void setTimeout(() => send(200, "slow"), Number(url.searchParams.get("ms") ?? 50));

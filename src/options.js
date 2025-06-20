@@ -26,6 +26,7 @@ Options:
                        in turn; URLs may be relative to BASE_URL
       --rate N         send N requests per second at most, evenly spaced (default: as fast as possible)
       --warmup N|TIME  send N requests (or send for TIME) first and leave them out of the results
+      --redirect MODE  follow (default) or manual: with manual a 3xx response is the result
       --timeout TIME   give up on a request after this long (default: 10s)
       --threshold EXPR  fail (exit 1) unless EXPR holds, e.g. p99<250ms, errors<1%, rps>500 (repeatable)
       --progress       show a live status line on stderr while the run is in progress
@@ -39,6 +40,7 @@ export const OPTIONS = {
   duration: { type: "string", short: "d" },
   timeout: { type: "string", default: "10s" },
   rate: { type: "string" },
+  redirect: { type: "string", default: "follow" },
   warmup: { type: "string" },
   concurrency: { type: "string", short: "c", default: "10" },
   method: { type: "string", short: "X" },
@@ -98,6 +100,7 @@ export function buildConfig(values, positionals) {
     rate = Number(values.rate);
     if (!(rate > 0) || !Number.isFinite(rate)) throw new UsageError(`--rate must be a positive number of requests per second, got '${values.rate}'`);
   }
+  if (!["follow", "manual"].includes(values.redirect)) throw new UsageError(`--redirect must be 'follow' or 'manual', got '${values.redirect}'`);
   const userAgent = `http-bench/${pkg.version}`;
   let targets;
   try {
@@ -127,6 +130,7 @@ export function buildConfig(values, positionals) {
     headers: targets[0].headers,
     body: targets[0].body,
     timeout: positiveDuration("timeout", values.timeout),
+    redirect: values.redirect,
     rate,
     warmup,
     requests: values.requests !== undefined ? positiveInteger("requests", values.requests) : duration === undefined ? 100 : undefined,
