@@ -1,5 +1,6 @@
 import { describeConfig } from "./analysis.js";
 import { formatBytes, formatMs } from "./format.js";
+import { comparisonLines } from "./compare.js";
 import { formatActual } from "./thresholds.js";
 
 const BAR_WIDTH = 30;
@@ -40,6 +41,7 @@ export function formatText(config, analysis) {
     lines.push(`  max   ${formatMs(latency.max)}`);
     lines.push("", "Histogram", ...histogramLines(analysis.histogram));
   }
+  if (analysis.comparison) lines.push("", ...comparisonLines(analysis.comparison));
   if (analysis.thresholds?.length > 0) {
     lines.push("", "Thresholds");
     for (const result of analysis.thresholds) lines.push(`  ${result.passed ? "PASS" : "FAIL"}  ${result.expression}  (${formatActual(result)})`);
@@ -47,8 +49,8 @@ export function formatText(config, analysis) {
   return lines.join("\n") + "\n";
 }
 
-/** The machine-readable report; the layout is described in the README. */
-export function formatJson(config, analysis, version) {
+/** The machine-readable report as an object; the layout is described in the README. */
+export function buildDocument(config, analysis, version) {
   const { latency } = analysis;
   const document = {
     version: 1,
@@ -75,5 +77,10 @@ export function formatJson(config, analysis, version) {
     errors: analysis.errorCounts,
     thresholds: (analysis.thresholds ?? []).map(({ expression, actual, passed }) => ({ expression, actual, passed })),
   };
-  return JSON.stringify(document, null, 2) + "\n";
+  if (analysis.comparison) document.comparison = analysis.comparison;
+  return document;
+}
+
+export function formatJson(config, analysis, version) {
+  return JSON.stringify(buildDocument(config, analysis, version), null, 2) + "\n";
 }

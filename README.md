@@ -37,3 +37,11 @@ per line:
     {"url": "/items/7", "method": "PUT", "headers": {"X-Trace": "on"}, "body": "raw body"}
 
 URLs may be relative to the URL given on the command line. `-H` headers apply to every request.
+## Comparing runs
+
+    http-bench --json -d 30s http://localhost:3000/ > before.json
+    # ...change something...
+    http-bench -d 30s --compare before.json --max-regression 10% http://localhost:3000/
+
+prints the change of p50, p90, p95, p99, mean, requests per second and error rate, and exits 1 if
+latency or throughput got worse by more than 10% (or the error rate by more than 10 points).

@@ -335,6 +335,54 @@ describe("cli", () => {
     assert.match(bad.stderr, /--redirect must be 'follow' or 'manual'/);
   });
 
+  it("--compare shows the change against an earlier --json report", async () => {
+    const first = await run(["--json", "-n", "20", `${server.url}/ok`]);
+    const { dir, cleanup } = tempFile(first.stdout);
+    try {
+      const { code, stdout } = await run(["-n", "20", "--compare", dir, `${server.url}/slow?ms=30`]);
+      assert.equal(code, 0); // informational unless --max-regression is given
+      assert.match(stdout, new RegExp(`\\nCompared with ${dir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\n  metric`));
+      assert.match(stdout, /\n {2}p50 .* ms .* ms +\+[\d.]+% +worse\n/);
+      const doc = JSON.parse((await run(["--json", "-n", "10", "--compare", dir, `${server.url}/ok`])).stdout);
+      assert.equal(doc.comparison.baseline, dir);
+      assert.ok(doc.comparison.rows.some((row) => row.metric === "p99"));
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("--max-regression turns a slowdown into exit status 1", async () => {
+    const first = await run(["--json", "-n", "20", `${server.url}/ok`]);
+    const { dir, cleanup } = tempFile(first.stdout);
+    try {
+      const slow = await run(["-n", "10", "--compare", dir, "--max-regression", "20%", `${server.url}/slow?ms=40`]);
+      assert.equal(slow.code, 1);
+      assert.match(slow.stdout, /REGRESSION/);
+      const generous = await run(["-n", "10", "--compare", dir, "--max-regression", "100000", `${server.url}/slow?ms=40`]);
+      assert.equal(generous.code, 0);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("rejects an unusable baseline and a lone --max-regression", async () => {
+    const { dir, cleanup } = tempFile("not json");
+    try {
+      const bad = await run(["--compare", dir, server.url]);
+      assert.equal(bad.code, 2);
+      assert.match(bad.stderr, /cannot read baseline .*not valid JSON/);
+    } finally {
+      cleanup();
+    }
+    assert.match((await run(["--max-regression", "10", server.url])).stderr, /--max-regression needs --compare/);
+    const { dir: other, cleanup: cleanupOther } = tempFile("{}");
+    try {
+      assert.match((await run(["--compare", other, "--max-regression", "lots", server.url])).stderr, /--max-regression must be a percentage/);
+    } finally {
+      cleanupOther();
+    }
+  });
+
   it("rejects bad durations", async () => {
     for (const bad of ["10", "fast", "0s"]) {
       const { code, stderr } = await run(["-d", bad, server.url]);

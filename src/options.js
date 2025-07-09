@@ -29,6 +29,8 @@ Options:
       --redirect MODE  follow (default) or manual: with manual a 3xx response is the result
       --timeout TIME   give up on a request after this long (default: 10s)
       --threshold EXPR  fail (exit 1) unless EXPR holds, e.g. p99<250ms, errors<1%, rps>500 (repeatable)
+      --compare FILE   compare the results with an earlier report written by --json
+      --max-regression PCT  with --compare: exit 1 if latency or throughput is worse by more than PCT percent
       --progress       show a live status line on stderr while the run is in progress
       --json           print the results as JSON instead of text
   -h, --help           show this help
@@ -49,6 +51,8 @@ export const OPTIONS = {
   "body-file": { type: "string" },
   "requests-file": { type: "string" },
   threshold: { type: "string", multiple: true },
+  compare: { type: "string" },
+  "max-regression": { type: "string" },
   progress: { type: "boolean" },
   json: { type: "boolean" },
   help: { type: "boolean", short: "h" },
@@ -116,6 +120,14 @@ export function buildConfig(values, positionals) {
   } catch (error) {
     throw new UsageError(error.message);
   }
+  let maxRegression;
+  if (values["max-regression"] !== undefined) {
+    if (values.compare === undefined) throw new UsageError("--max-regression needs --compare");
+    maxRegression = Number(values["max-regression"].replace(/%$/, ""));
+    if (!(maxRegression >= 0) || !Number.isFinite(maxRegression) || values["max-regression"] === "") {
+      throw new UsageError(`--max-regression must be a percentage such as 10%, got '${values["max-regression"]}'`);
+    }
+  }
   let thresholds;
   try {
     thresholds = (values.threshold ?? []).map(parseThreshold);
@@ -124,6 +136,8 @@ export function buildConfig(values, positionals) {
   }
   return {
     thresholds,
+    compare: values.compare,
+    maxRegression,
     targets,
     url: targets[0].url,
     method: targets[0].method,
