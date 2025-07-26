@@ -90,7 +90,7 @@ async function runPhase({ targets, url, requests, duration, concurrency, rate, m
         if (stop?.aborted) break; // cancelled by the caller: not a result
         outcome = { error: describeError(error) };
       }
-      recorder.record(outcome);
+      recorder.record(outcome, performance.now() - started);
     }
   }
   await Promise.all(Array.from({ length: Math.min(concurrency, limit) }, worker));

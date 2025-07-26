@@ -52,6 +52,7 @@ export function analyze({ recorder, elapsedMs }, percentiles = DEFAULT_PERCENTIL
     requestsPerSecond: elapsedMs > 0 ? recorder.requests / (elapsedMs / 1000) : 0,
     latency,
     histogram: histogram.rows(),
+    timeline: recorder.timeline.map(({ requests, failed }, second) => ({ second, requests, failed })),
     percentile: (p) => histogram.percentile(p),
   };
 }

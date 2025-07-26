@@ -4,6 +4,14 @@ import { comparisonLines } from "./compare.js";
 import { formatActual } from "./thresholds.js";
 
 const BAR_WIDTH = 30;
+const BLOCKS = "\u2581\u2582\u2583\u2584\u2585\u2586\u2587\u2588";
+
+/** One character per value, as tall as the value is relative to the largest. */
+export function sparkline(values) {
+  const peak = Math.max(...values);
+  if (!(peak > 0)) return BLOCKS[0].repeat(values.length);
+  return values.map((value) => BLOCKS[Math.min(BLOCKS.length - 1, Math.floor((value / peak) * (BLOCKS.length - 1) + 0.5))]).join("");
+}
 
 function histogramLines(rows) {
   const total = rows.reduce((sum, row) => sum + row.count, 0);
@@ -31,6 +39,7 @@ export function formatText(config, analysis) {
     const detail = Object.entries(analysis.errorCounts).map(([name, count]) => `${name}: ${count}`).join(", ");
     lines.push(`${analysis.errors} failed (${detail})`);
   }
+  if (analysis.timeline.length >= 3) lines.push("", `Requests per second  ${sparkline(analysis.timeline.map((t) => t.requests))}  (peak ${Math.max(...analysis.timeline.map((t) => t.requests))})`);
   const statuses = Object.entries(analysis.statusCodes);
   if (statuses.length > 0) {
     lines.push("", "Status codes", ...statuses.map(([status, count]) => `  ${status}  ${count}`));
@@ -75,6 +84,7 @@ export function buildDocument(config, analysis, version) {
     histogram: analysis.histogram.map(({ from, to, count, tail }) => ({ fromMs: from, toMs: to, count, ...(tail ? { tail } : {}) })),
     statusCodes: analysis.statusCodes,
     errors: analysis.errorCounts,
+    timeline: analysis.timeline,
     thresholds: (analysis.thresholds ?? []).map(({ expression, actual, passed }) => ({ expression, actual, passed })),
   };
   if (analysis.comparison) document.comparison = analysis.comparison;

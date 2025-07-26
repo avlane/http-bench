@@ -23,6 +23,18 @@ describe("Recorder", () => {
     assert.equal(recorder.histogram.count, 4);
   });
 
+  it("keeps a per-second timeline of requests and failures", () => {
+    const recorder = new Recorder();
+    recorder.record({ latency: 1, status: 200 }, 100);
+    recorder.record({ latency: 1, status: 200 }, 900);
+    recorder.record({ latency: 1, status: 500 }, 1000);
+    recorder.record({ error: "timeout" }, 3500);
+    assert.deepEqual(recorder.timeline, [
+      { requests: 2, failed: 0 }, { requests: 1, failed: 1 }, { requests: 0, failed: 0 }, { requests: 1, failed: 1 },
+    ]);
+    assert.deepEqual(analyze({ recorder, elapsedMs: 4000 }).timeline[3], { second: 3, requests: 1, failed: 1 });
+  });
+
   it("does not put failed requests into the latency histogram", () => {
     const recorder = new Recorder();
     recorder.record({ error: "timeout" });

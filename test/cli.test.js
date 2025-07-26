@@ -383,6 +383,17 @@ describe("cli", () => {
     }
   });
 
+  it("reports requests per second over time", async () => {
+    const { stdout } = await run(["-d", "2300ms", "-c", "2", `${server.url}/slow?ms=20`]);
+    assert.match(stdout, /\nRequests per second {2}[\u2581-\u2588]{3} {2}\(peak \d+\)\n/);
+    const doc = JSON.parse((await run(["--json", "-d", "1500ms", "-c", "2", `${server.url}/slow?ms=20`])).stdout);
+    assert.equal(doc.timeline.length, 2);
+    assert.deepEqual(doc.timeline.map((t) => t.second), [0, 1]);
+    assert.equal(doc.timeline.reduce((sum, t) => sum + t.requests, 0), doc.summary.requests);
+    const short = await run(["-n", "5", `${server.url}/ok`]);
+    assert.ok(!short.stdout.includes("Requests per second"));
+  });
+
   it("rejects bad durations", async () => {
     for (const bad of ["10", "fast", "0s"]) {
       const { code, stderr } = await run(["-d", bad, server.url]);
