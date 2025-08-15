@@ -52,8 +52,11 @@ describe("buildRequest", () => {
       const file = path.join(dir, "body.json");
       fs.writeFileSync(file, '{"a": 1}\n');
       const request = buildRequest({ bodyFile: file });
-      assert.equal(request.body, '{"a": 1}\n');
+      assert.deepEqual(request.body, Buffer.from('{"a": 1}\n'));
       assert.equal(request.method, "POST");
+      const binary = path.join(dir, "blob.bin");
+      fs.writeFileSync(binary, Buffer.from([0xff, 0xfe, 0x00, 0x80, 0x0a, 0xc3]));
+      assert.deepEqual(buildRequest({ bodyFile: binary }).body, Buffer.from([0xff, 0xfe, 0x00, 0x80, 0x0a, 0xc3]));
       assert.throws(() => buildRequest({ bodyFile: path.join(dir, "missing") }), /cannot read .*missing: ENOENT/);
       assert.throws(() => buildRequest({ body: "x", bodyFile: file }), /either --body or --body-file/);
     } finally {

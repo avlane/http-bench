@@ -21,7 +21,7 @@ export function buildRequest({ method, headers = [], body, bodyFile, userAgent }
   let payload = body;
   if (bodyFile !== undefined) {
     try {
-      payload = fs.readFileSync(bodyFile, "utf8");
+      payload = fs.readFileSync(bodyFile); // bytes: a file may not be text
     } catch (error) {
       throw new Error(`cannot read ${bodyFile}: ${error.code ?? error.message}`);
     }

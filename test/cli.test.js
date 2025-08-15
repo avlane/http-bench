@@ -122,6 +122,20 @@ describe("cli", () => {
     }
   });
 
+  it("sends the exact bytes of a binary --body-file", async () => {
+    const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0xff, 0xfe, 0x80, 0x0d, 0x0a]);
+    const { dir, cleanup } = tempFile(bytes);
+    try {
+      server.requests.length = 0;
+      const { code, stdout } = await run(["--json", "-n", "2", "--body-file", dir, `${server.url}/echo`]);
+      assert.equal(code, 0);
+      for (const request of server.requests) assert.deepEqual(request.body, bytes);
+      assert.equal(JSON.parse(stdout).config.bodyBytes, bytes.length);
+    } finally {
+      cleanup();
+    }
+  });
+
   it("a body without a method means POST", async () => {
     server.requests.length = 0;
     await run(["-n", "1", "-b", "x", `${server.url}/echo`]);
