@@ -9,7 +9,10 @@ import { capture } from "./helpers.js";
 import { closedPort, startServer } from "./server.js";
 
 let server;
-before(async () => { server = await startServer(); });
+before(async () => {
+  process.env.HTTP_BENCH_TEST_RUN = "from-env";
+  server = await startServer();
+});
 after(() => server.close());
 
 function tempFile(contents) {
@@ -56,7 +59,7 @@ describe("cli", () => {
     assert.equal(doc.version, 1);
     assert.equal(doc.tool.name, "http-bench");
     assert.deepEqual(doc.config, {
-      url: `${server.url}/ok`, method: "GET", concurrency: 4, rate: null, latencyFrom: "sent", redirect: "follow", requests: 40, durationMs: null, warmup: null,
+      url: `${server.url}/ok`, method: "GET", concurrency: 4, rate: null, latencyFrom: "sent", redirect: "follow", template: false, requests: 40, durationMs: null, warmup: null,
       timeoutMs: 10000, bodyBytes: 0,
       headers: { authorization: "<redacted>", "x-test": "1", "user-agent": doc.config.headers["user-agent"] },
     });
@@ -134,6 +137,34 @@ describe("cli", () => {
     } finally {
       cleanup();
     }
+  });
+
+  it("--template fills in placeholders per request", async () => {
+    server.requests.length = 0;
+    const { code } = await run(["-n", "4", "-c", "1", "--template", "-H", "X-Run: {{env:HTTP_BENCH_TEST_RUN}}", "-H", "X-Id: id-{{i}}", "-b", '{"n": {{i}}, "r": {{rand:100-100}}}',
+      `${server.url}/echo?item={{i}}&u={{uuid}}`]);
+    assert.equal(code, 0);
+    assert.deepEqual(server.requests.map((r) => r.query.match(/item=(\d+)/)[1]), ["1", "2", "3", "4"]);
+    assert.ok(server.requests.every((r) => /u=[0-9a-f-]{36}$/.test(r.query)));
+    assert.deepEqual(server.requests.map((r) => r.headers["x-id"]), ["id-1", "id-2", "id-3", "id-4"]);
+    assert.deepEqual(server.requests.map((r) => r.body.toString()), [1, 2, 3, 4].map((n) => `{"n": ${n}, "r": 100}`));
+    assert.ok(server.requests.every((r) => r.headers["x-run"] === "from-env"));
+  });
+
+  it("--template is off by default, so braces are sent as they are", async () => {
+    server.requests.length = 0;
+    await run(["-n", "1", "-b", "{{i}}", `${server.url}/echo`]);
+    assert.equal(server.requests[0].body.toString(), "{{i}}");
+  });
+
+  it("--template reports unknown placeholders and missing variables before sending anything", async () => {
+    server.requests.length = 0;
+    const unknown = await run(["--template", "-H", "X: {{nope}}", server.url]);
+    assert.equal(unknown.code, 2);
+    assert.match(unknown.stderr, /--template: unknown placeholder \{\{nope\}\}/);
+    const missing = await run(["--template", "-H", "X: {{env:HTTP_BENCH_SURELY_UNSET}}", server.url]);
+    assert.match(missing.stderr, /HTTP_BENCH_SURELY_UNSET is not set/);
+    assert.equal(server.requests.length, 0);
   });
 
   it("a body without a method means POST", async () => {

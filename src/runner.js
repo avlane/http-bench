@@ -63,7 +63,8 @@ async function runPhase({ targets, url, requests, duration, concurrency, rate, m
   async function worker() {
     while (issued < limit && performance.now() < deadline && !stop?.aborted) {
       issued += 1;
-      const target = list[(issued - 1) % list.length];
+      const listed = list[(issued - 1) % list.length];
+      const target = listed.render ? listed.render(issued) : listed;
       let start;
       if (pace) {
         // With a rate, a request is "due" at its time slot. If the previous responses were

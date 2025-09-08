@@ -45,3 +45,11 @@ URLs may be relative to the URL given on the command line. `-H` headers apply to
 
 prints the change of p50, p90, p95, p99, mean, requests per second and error rate, and exits 1 if
 latency or throughput got worse by more than 10% (or the error rate by more than 10 points).
+## Templates
+
+With `--template`, placeholders in the URL, in header values and in the body are filled in for every
+request: `{{i}}` (request number), `{{uuid}}`, `{{timestamp}}` (ms), `{{rand:1-1000}}` and
+`{{env:NAME}}` (an environment variable, read once - handy for tokens).
+
+    http-bench --template -X PUT -H 'Authorization: Bearer {{env:TOKEN}}' \\
+      -b '{"id": {{i}}, "key": "{{uuid}}"}' 'http://localhost:3000/items/{{rand:1-5000}}'

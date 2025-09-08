@@ -3,6 +3,7 @@ import fs from "node:fs";
 import { parseDuration } from "./duration.js";
 import { buildRequest } from "./request.js";
 import { loadRequestsFile } from "./scenario.js";
+import { templateTarget } from "./template.js";
 import { parseThreshold } from "./thresholds.js";
 
 const pkg = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8"));
@@ -31,6 +32,8 @@ Options:
       --threshold EXPR  fail (exit 1) unless EXPR holds, e.g. p99<250ms, errors<1%, rps>500 (repeatable)
       --compare FILE   compare the results with an earlier report written by --json
       --max-regression PCT  with --compare: exit 1 if latency or throughput is worse by more than PCT percent
+      --template       fill in {{i}}, {{uuid}}, {{timestamp}}, {{rand:1-100}} and {{env:NAME}} in the URL,
+                       header values and body of every request
       --progress       show a live status line on stderr while the run is in progress
       --json           print the results as JSON instead of text
   -h, --help           show this help
@@ -53,6 +56,7 @@ export const OPTIONS = {
   threshold: { type: "string", multiple: true },
   compare: { type: "string" },
   "max-regression": { type: "string" },
+  template: { type: "boolean" },
   progress: { type: "boolean" },
   json: { type: "boolean" },
   help: { type: "boolean", short: "h" },
@@ -120,6 +124,13 @@ export function buildConfig(values, positionals) {
   } catch (error) {
     throw new UsageError(error.message);
   }
+  if (values.template) {
+    try {
+      targets = targets.map((target) => templateTarget(target));
+    } catch (error) {
+      throw new UsageError(`--template: ${error.message}`);
+    }
+  }
   let maxRegression;
   if (values["max-regression"] !== undefined) {
     if (values.compare === undefined) throw new UsageError("--max-regression needs --compare");
@@ -137,6 +148,7 @@ export function buildConfig(values, positionals) {
   return {
     thresholds,
     compare: values.compare,
+    template: Boolean(values.template),
     maxRegression,
     targets,
     url: targets[0].url,
