@@ -167,6 +167,28 @@ describe("cli", () => {
     assert.equal(server.requests.length, 0);
   });
 
+  it("-u sends basic authentication and the JSON report hides it", async () => {
+    server.requests.length = 0;
+    const { code, stdout } = await run(["--json", "-n", "2", "-u", "alice:s3cret pass", `${server.url}/ok`]);
+    assert.equal(code, 0);
+    const expected = `Basic ${Buffer.from("alice:s3cret pass").toString("base64")}`;
+    assert.ok(server.requests.every((r) => r.headers.authorization === expected));
+    assert.equal(JSON.parse(stdout).config.headers.authorization, "<redacted>");
+    assert.ok(!stdout.includes("s3cret") && !stdout.includes(Buffer.from("alice:s3cret pass").toString("base64")));
+  });
+
+  it("-u needs a colon, and also applies to --requests-file", async () => {
+    assert.match((await run(["-u", "alice", server.url])).stderr, /--user must look like USER:PASSWORD/);
+    const { dir, cleanup } = tempFile(JSON.stringify([{ url: "/ok" }]));
+    try {
+      server.requests.length = 0;
+      await run(["--requests-file", dir, "-n", "1", "-u", "bob:pw", server.url]);
+      assert.equal(server.requests[0].headers.authorization, `Basic ${Buffer.from("bob:pw").toString("base64")}`);
+    } finally {
+      cleanup();
+    }
+  });
+
   it("a body without a method means POST", async () => {
     server.requests.length = 0;
     await run(["-n", "1", "-b", "x", `${server.url}/echo`]);

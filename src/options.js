@@ -32,6 +32,7 @@ Options:
       --threshold EXPR  fail (exit 1) unless EXPR holds, e.g. p99<250ms, errors<1%, rps>500 (repeatable)
       --compare FILE   compare the results with an earlier report written by --json
       --max-regression PCT  with --compare: exit 1 if latency or throughput is worse by more than PCT percent
+  -u, --user USER:PASSWORD  send HTTP basic authentication
       --template       fill in {{i}}, {{uuid}}, {{timestamp}}, {{rand:1-100}} and {{env:NAME}} in the URL,
                        header values and body of every request
       --progress       show a live status line on stderr while the run is in progress
@@ -56,6 +57,7 @@ export const OPTIONS = {
   threshold: { type: "string", multiple: true },
   compare: { type: "string" },
   "max-regression": { type: "string" },
+  user: { type: "string", short: "u" },
   template: { type: "boolean" },
   progress: { type: "boolean" },
   json: { type: "boolean" },
@@ -109,6 +111,9 @@ export function buildConfig(values, positionals) {
     if (!(rate > 0) || !Number.isFinite(rate)) throw new UsageError(`--rate must be a positive number of requests per second, got '${values.rate}'`);
   }
   if (!["follow", "manual"].includes(values.redirect)) throw new UsageError(`--redirect must be 'follow' or 'manual', got '${values.redirect}'`);
+  if (values.user !== undefined && !values.user.includes(":")) throw new UsageError("--user must look like USER:PASSWORD");
+  const headerLines = [...(values.header ?? [])];
+  if (values.user !== undefined) headerLines.push(`Authorization: Basic ${Buffer.from(values.user).toString("base64")}`);
   const userAgent = `http-bench/${pkg.version}`;
   let targets;
   try {
@@ -116,9 +121,9 @@ export function buildConfig(values, positionals) {
       if (values.body !== undefined || values["body-file"] !== undefined) {
         throw new Error("--body and --body-file cannot be combined with --requests-file; put the bodies in the file");
       }
-      targets = loadRequestsFile(requestsFile, { baseUrl, headers: values.header ?? [], method: values.method, userAgent });
+      targets = loadRequestsFile(requestsFile, { baseUrl, headers: headerLines, method: values.method, userAgent });
     } else {
-      const request = buildRequest({ method: values.method, headers: values.header, body: values.body, bodyFile: values["body-file"], userAgent });
+      const request = buildRequest({ method: values.method, headers: headerLines, body: values.body, bodyFile: values["body-file"], userAgent });
       targets = [{ url: baseUrl.href, method: request.method, headers: request.headers, body: request.body }];
     }
   } catch (error) {
