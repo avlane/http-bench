@@ -461,6 +461,25 @@ describe("cli", () => {
     assert.ok(!short.stdout.includes("Requests per second"));
   });
 
+  it("--percentiles chooses the percentiles reported", async () => {
+    const text = (await run(["-n", "40", "--percentiles", "99.9,50,25", `${server.url}/ok`])).stdout;
+    const labels = [...text.matchAll(/\n {2}(p[\d.]+) /g)].map((m) => m[1]);
+    assert.deepEqual(labels, ["p25", "p50", "p99.9"]);
+    const doc = JSON.parse((await run(["--json", "-n", "40", "--percentiles", "10, 90", `${server.url}/ok`])).stdout);
+    assert.deepEqual(Object.keys(doc.latencyMs.percentiles), ["10", "90"]);
+    for (const bad of ["", "0", "101", "50,50", "fast", "50;90", "-5"]) {
+      const { code, stderr } = await run([`--percentiles=${bad}`, server.url]);
+      assert.equal(code, 2, bad);
+      assert.match(stderr, /--percentiles must be distinct numbers/, bad);
+    }
+  });
+
+  it("thresholds can use any percentile, not only the reported ones", async () => {
+    const { code, stdout } = await run(["-n", "30", "--percentiles", "50", "--threshold", "p97<10s", `${server.url}/ok`]);
+    assert.equal(code, 0);
+    assert.match(stdout, /PASS {2}p97<10s/);
+  });
+
   it("rejects bad durations", async () => {
     for (const bad of ["10", "fast", "0s"]) {
       const { code, stderr } = await run(["-d", bad, server.url]);

@@ -54,7 +54,7 @@ export async function main(argv, io = {}) {
     } finally {
       stopProgress();
     }
-    const analysis = analyze(result);
+    const analysis = analyze(result, config.percentiles);
     analysis.thresholds = evaluateThresholds(config.thresholds, analysis);
     if (baseline) {
       const comparison = compareRuns(baseline, buildDocument(config, analysis, pkg.version), { maxRegression: config.maxRegression });

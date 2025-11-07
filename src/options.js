@@ -10,6 +10,15 @@ const pkg = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.ur
 
 export class UsageError extends Error {}
 
+function parsePercentiles(text) {
+  const list = text.split(",").map((part) => part.trim());
+  const numbers = list.map((part) => (/^\d+(?:\.\d+)?$/.test(part) ? Number(part) : NaN));
+  if (numbers.some((n) => !(n > 0 && n <= 100)) || new Set(numbers).size !== numbers.length) {
+    throw new UsageError(`--percentiles must be distinct numbers above 0 and up to 100, such as 50,95,99.9; got '${text}'`);
+  }
+  return numbers.toSorted((a, b) => a - b);
+}
+
 export const HELP = `Usage: http-bench [options] URL
        http-bench [options] --requests-file FILE [BASE_URL]
 
@@ -29,6 +38,7 @@ Options:
       --warmup N|TIME  send N requests (or send for TIME) first and leave them out of the results
       --redirect MODE  follow (default) or manual: with manual a 3xx response is the result
       --timeout TIME   give up on a request after this long (default: 10s)
+      --percentiles LIST  latency percentiles to report, e.g. 50,95,99.9 (default: 50,75,90,95,99,99.9)
       --threshold EXPR  fail (exit 1) unless EXPR holds, e.g. p99<250ms, errors<1%, rps>500 (repeatable)
       --compare FILE   compare the results with an earlier report written by --json
       --max-regression PCT  with --compare: exit 1 if latency or throughput is worse by more than PCT percent
@@ -54,6 +64,7 @@ export const OPTIONS = {
   body: { type: "string", short: "b" },
   "body-file": { type: "string" },
   "requests-file": { type: "string" },
+  percentiles: { type: "string" },
   threshold: { type: "string", multiple: true },
   compare: { type: "string" },
   "max-regression": { type: "string" },
@@ -153,6 +164,7 @@ export function buildConfig(values, positionals) {
   return {
     thresholds,
     compare: values.compare,
+    percentiles: values.percentiles === undefined ? undefined : parsePercentiles(values.percentiles),
     template: Boolean(values.template),
     maxRegression,
     targets,
