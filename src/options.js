@@ -46,7 +46,9 @@ Options:
       --template       fill in {{i}}, {{uuid}}, {{timestamp}}, {{rand:1-100}} and {{env:NAME}} in the URL,
                        header values and body of every request
       --progress       show a live status line on stderr while the run is in progress
-      --json           print the results as JSON instead of text
+      --format FORMAT  text (default), json or markdown (a table for pull request comments)
+      --json           same as --format json
+  -o, --output FILE    write the report to FILE instead of standard output
   -h, --help           show this help
   -v, --version        show the version
 `;
@@ -71,6 +73,8 @@ export const OPTIONS = {
   user: { type: "string", short: "u" },
   template: { type: "boolean" },
   progress: { type: "boolean" },
+  format: { type: "string" },
+  output: { type: "string", short: "o" },
   json: { type: "boolean" },
   help: { type: "boolean", short: "h" },
   version: { type: "boolean", short: "v" },
@@ -101,6 +105,17 @@ function parseBaseUrl(text) {
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") throw new UsageError(`unsupported protocol ${url.protocol} (use http or https)`);
   return url;
+}
+
+export const FORMATS = ["text", "json", "markdown"];
+
+/** The report format chosen with --format or --json. */
+export function chooseFormat(values) {
+  if (values.format !== undefined && !FORMATS.includes(values.format)) {
+    throw new UsageError(`--format must be one of ${FORMATS.join(", ")}, got '${values.format}'`);
+  }
+  if (values.json && values.format !== undefined && values.format !== "json") throw new UsageError("--json conflicts with --format " + values.format);
+  return values.json ? "json" : values.format ?? "text";
 }
 
 /** Validate the parsed command line and turn it into the settings of a run. */

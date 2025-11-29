@@ -1,6 +1,6 @@
 import { describeConfig } from "./analysis.js";
 import { formatBytes, formatMs } from "./format.js";
-import { comparisonLines } from "./compare.js";
+import { comparisonLines, comparisonValue } from "./compare.js";
 import { formatActual } from "./thresholds.js";
 
 const BAR_WIDTH = 30;
@@ -54,6 +54,37 @@ export function formatText(config, analysis) {
   if (analysis.thresholds?.length > 0) {
     lines.push("", "Thresholds");
     for (const result of analysis.thresholds) lines.push(`  ${result.passed ? "PASS" : "FAIL"}  ${result.expression}  (${formatActual(result)})`);
+  }
+  return lines.join("\n") + "\n";
+}
+
+/** A table for pull request comments and chat. */
+export function formatMarkdown(config, analysis) {
+  const { latency } = analysis;
+  const target = (config.targets?.length ?? 0) > 1 ? `${config.targets.length} requests in turn` : `${config.method} ${config.url}`;
+  const rows = [
+    ["Requests", `${analysis.requests} in ${(analysis.elapsedMs / 1000).toFixed(2)} s with concurrency ${config.concurrency}`],
+    ["Succeeded", `${analysis.successes} (${analysis.requests ? ((analysis.successes / analysis.requests) * 100).toFixed(1) : "0.0"}%)`],
+    ["Failed", `${analysis.errors}${analysis.errors > 0 ? ` (${Object.entries(analysis.errorCounts).map(([name, count]) => `${name}: ${count}`).join(", ")})` : ""}`],
+    ["Throughput", `${analysis.requestsPerSecond.toFixed(1)} requests/s`],
+    ["Received", formatBytes(analysis.bytes)],
+  ];
+  if (latency.count > 0) {
+    rows.push(["Latency min", formatMs(latency.min)], ["Latency mean", formatMs(latency.mean)]);
+    for (const [p, value] of Object.entries(latency.percentiles)) rows.push([`Latency p${p}`, formatMs(value)]);
+    rows.push(["Latency max", formatMs(latency.max)]);
+  }
+  const lines = [`### http-bench: \`${target}\``, "", "| | |", "| --- | --- |", ...rows.map(([name, value]) => `| ${name} | ${value} |`)];
+  if (analysis.thresholds?.length > 0) {
+    lines.push("", "| Threshold | Result | Actual |", "| --- | --- | --- |");
+    for (const t of analysis.thresholds) lines.push(`| \`${t.expression}\` | ${t.passed ? "pass" : "**FAIL**"} | ${formatActual(t)} |`);
+  }
+  if (analysis.comparison) {
+    lines.push("", `Compared with \`${analysis.comparison.baseline}\`:`, "", "| Metric | Before | After | Change |", "| --- | --- | --- | --- |");
+    for (const row of analysis.comparison.rows) {
+      const change = row.change === null ? "new" : `${row.change >= 0 ? "+" : ""}${row.change.toFixed(row.unit === "points" ? 2 : 1)}${row.unit === "points" ? " pts" : "%"}`;
+      lines.push(`| ${row.metric} | ${comparisonValue(row, row.before)} | ${comparisonValue(row, row.after)} | ${change}${row.regressed ? " **REGRESSION**" : ""} |`);
+    }
   }
   return lines.join("\n") + "\n";
 }

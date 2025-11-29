@@ -480,6 +480,38 @@ describe("cli", () => {
     assert.match(stdout, /PASS {2}p97<10s/);
   });
 
+  it("--format markdown prints a table", async () => {
+    const { code, stdout } = await run(["--format", "markdown", "-n", "20", "--threshold", "errors<1%", `${server.url}/ok`]);
+    assert.equal(code, 0);
+    assert.match(stdout, new RegExp(`^### http-bench: \`GET ${server.url}/ok\`\\n\\n\\| \\| \\|\\n\\| --- \\| --- \\|\\n\\| Requests \\| 20 in `));
+    assert.match(stdout, /\n\| Throughput \| [\d.]+ requests\/s \|\n/);
+    assert.match(stdout, /\n\| Latency p99 \| [\d.]+ m?s \|\n/);
+    assert.match(stdout, /\n\| Threshold \| Result \| Actual \|\n\| --- \| --- \| --- \|\n\| `errors<1%` \| pass \| 0\.00% \|\n$/);
+  });
+
+  it("--output writes the report to a file and leaves stdout empty", async () => {
+    const { dir, cleanup } = tempFile("");
+    try {
+      const target = path.join(path.dirname(dir), "report.json");
+      const { code, stdout } = await run(["--format", "json", "--output", target, "-n", "5", `${server.url}/ok`]);
+      assert.equal(code, 0);
+      assert.equal(stdout, "");
+      assert.equal(JSON.parse(fs.readFileSync(target, "utf8")).summary.requests, 5);
+      assert.deepEqual(fs.readdirSync(path.dirname(dir)).sort(), ["report.json", "requests.json"]);
+      const unwritable = await run(["--output", path.join(path.dirname(dir), "no", "such", "dir", "r.txt"), "-n", "1", `${server.url}/ok`]);
+      assert.equal(unwritable.code, 2);
+      assert.match(unwritable.stderr, /cannot write .*ENOENT/);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("--format is validated and --json is a shortcut for it", async () => {
+    assert.match((await run(["--format", "xml", server.url])).stderr, /--format must be one of text, json, markdown/);
+    assert.match((await run(["--json", "--format", "markdown", server.url])).stderr, /--json conflicts with --format markdown/);
+    JSON.parse((await run(["--json", "--format", "json", "-n", "1", `${server.url}/ok`])).stdout);
+  });
+
   it("rejects bad durations", async () => {
     for (const bad of ["10", "fast", "0s"]) {
       const { code, stderr } = await run(["-d", bad, server.url]);

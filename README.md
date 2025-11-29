@@ -12,7 +12,7 @@ wins), `-c` sets how many are in flight at once.
 and cold caches don't distort the results.
 ## JSON output
 
-`--json` prints one JSON document instead of the text report, for scripts and for comparing
+`--json` (or `--format json`) prints one JSON document instead of the text report, for scripts and for comparing
 runs. Header values that look like credentials (`Authorization`, `Cookie`, `X-Api-Key`) are
 replaced by `<redacted>` in the `config` section.
 `--rate 200` sends 200 requests per second at most, evenly spaced, which is how real clients behave;
@@ -53,3 +53,5 @@ request: `{{i}}` (request number), `{{uuid}}`, `{{timestamp}}` (ms), `{{rand:1-1
 
     http-bench --template -X PUT -H 'Authorization: Bearer {{env:TOKEN}}' \\
       -b '{"id": {{i}}, "key": "{{uuid}}"}' 'http://localhost:3000/items/{{rand:1-5000}}'
+`--format markdown` prints a table for pull request comments, and `-o report.json` writes the report to a
+file instead of standard output.

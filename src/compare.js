@@ -54,6 +54,10 @@ export function compareRuns(baseline, current, { maxRegression } = {}) {
   return { rows, regressed: rows.some((row) => row.regressed) };
 }
 
+export function comparisonValue(row, value) {
+  return formatValue(row, value);
+}
+
 function formatValue(row, value) {
   if (row.unit === "ms") return formatMs(value);
   if (row.unit === "rps") return value.toFixed(1);
