@@ -28,6 +28,7 @@ export function formatText(config, analysis) {
   const { latency } = analysis;
   const targets = config.targets ?? [];
   const lines = [
+    ...(analysis.interrupted ? [`Interrupted: the results cover the first ${(analysis.elapsedMs / 1000).toFixed(1)} s only.`] : []),
     ...(targets.length > 1
       ? [`${targets.length} requests in turn:`, ...targets.slice(0, 5).map((t) => `  ${t.method} ${t.url}`), ...(targets.length > 5 ? [`  ... and ${targets.length - 5} more`] : [])]
       : [`${config.method} ${config.url}`]),
@@ -102,6 +103,7 @@ export function buildDocument(config, analysis, version) {
       successes: analysis.successes,
       errors: analysis.errors,
       elapsedMs: analysis.elapsedMs,
+      interrupted: Boolean(analysis.interrupted),
       bytes: analysis.bytes,
       requestsPerSecond: analysis.requestsPerSecond,
     },

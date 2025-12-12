@@ -512,6 +512,23 @@ describe("cli", () => {
     JSON.parse((await run(["--json", "--format", "json", "-n", "1", `${server.url}/ok`])).stdout);
   });
 
+  it("stops on a signal, prints what was measured and exits 130", async () => {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 200);
+    const { io, out } = capture();
+    const started = Date.now();
+    const code = await main(["-d", "60s", "-c", "2", `${server.url}/slow?ms=20`], { ...io, signal: controller.signal });
+    assert.equal(code, 130);
+    assert.ok(Date.now() - started < 3000, "did not stop");
+    assert.match(out.stdout, /^Interrupted: the results cover the first 0\.\d s only\.\n/);
+    assert.match(out.stdout, /\nLatency\n/);
+    const json = capture();
+    const again = new AbortController();
+    setTimeout(() => again.abort(), 150);
+    await main(["--json", "-d", "60s", `${server.url}/slow?ms=20`], { ...json.io, signal: again.signal });
+    assert.equal(JSON.parse(json.out.stdout).summary.interrupted, true);
+  });
+
   it("rejects bad durations", async () => {
     for (const bad of ["10", "fast", "0s"]) {
       const { code, stderr } = await run(["-d", bad, server.url]);

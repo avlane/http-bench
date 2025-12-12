@@ -16,6 +16,7 @@ const pkg = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.ur
 export const EXIT_OK = 0;
 export const EXIT_THRESHOLD = 1; // a --threshold was not met
 export const EXIT_USAGE = 2;
+export const EXIT_INTERRUPTED = 130; // stopped with Ctrl-C; the report covers what was measured
 export const EXIT_NO_SUCCESS = 3; // the target was unreachable or every request failed
 
 /** Write to a temporary file next to the target and rename it, so readers never see half a report. */
@@ -64,11 +65,12 @@ export async function main(argv, io = {}) {
     const stopProgress = values.progress ? startProgress(recorder, stderr, { intervalMs: io.progressIntervalMs }) : () => {};
     let result;
     try {
-      result = await run({ ...config, recorder, fetchImpl: io.fetch });
+      result = await run({ ...config, recorder, signal: io.signal, fetchImpl: io.fetch });
     } finally {
       stopProgress();
     }
     const analysis = analyze(result, config.percentiles);
+    analysis.interrupted = result.interrupted;
     analysis.thresholds = evaluateThresholds(config.thresholds, analysis);
     if (baseline) {
       const comparison = compareRuns(baseline, buildDocument(config, analysis, pkg.version), { maxRegression: config.maxRegression });
@@ -77,6 +79,7 @@ export async function main(argv, io = {}) {
     const report = format === "json" ? formatJson(config, analysis, pkg.version) : format === "markdown" ? formatMarkdown(config, analysis) : formatText(config, analysis);
     if (values.output) writeFileAtomically(values.output, report);
     else stdout.write(report);
+    if (result.interrupted) return EXIT_INTERRUPTED;
     if (analysis.successes === 0) return EXIT_NO_SUCCESS;
     return analysis.thresholds.every((t) => t.passed) && !analysis.comparison?.regressed ? EXIT_OK : EXIT_THRESHOLD;
   } catch (error) {
