@@ -59,7 +59,7 @@ describe("cli", () => {
     assert.equal(doc.version, 1);
     assert.equal(doc.tool.name, "http-bench");
     assert.deepEqual(doc.config, {
-      url: `${server.url}/ok`, method: "GET", concurrency: 4, rate: null, latencyFrom: "sent", redirect: "follow", template: false, requests: 40, durationMs: null, warmup: null,
+      url: `${server.url}/ok`, method: "GET", concurrency: 4, rate: null, thinkMs: null, latencyFrom: "sent", redirect: "follow", template: false, requests: 40, durationMs: null, warmup: null,
       timeoutMs: 10000, bodyBytes: 0,
       headers: { authorization: "<redacted>", "x-test": "1", "user-agent": doc.config.headers["user-agent"] },
     });
@@ -527,6 +527,20 @@ describe("cli", () => {
     setTimeout(() => again.abort(), 150);
     await main(["--json", "-d", "60s", `${server.url}/slow?ms=20`], { ...json.io, signal: again.signal });
     assert.equal(JSON.parse(json.out.stdout).summary.interrupted, true);
+  });
+
+  it("--think takes a duration or a range", async () => {
+    const started = Date.now();
+    const { code } = await run(["-n", "4", "-c", "1", "--think", "30ms-50ms", `${server.url}/ok`]);
+    assert.equal(code, 0);
+    assert.ok(Date.now() - started >= 110);
+    const doc = JSON.parse((await run(["--json", "-n", "2", "-c", "1", "--think", "5ms", `${server.url}/ok`])).stdout);
+    assert.deepEqual(doc.config.thinkMs, [5, 5]);
+    for (const bad of ["fast", "50ms-10ms", "1s-2s-3s", "10"]) {
+      const { code: badCode, stderr } = await run(["--think", bad, server.url]);
+      assert.equal(badCode, 2, bad);
+      assert.match(stderr, /--think/, bad);
+    }
   });
 
   it("rejects bad durations", async () => {

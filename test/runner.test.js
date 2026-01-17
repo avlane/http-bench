@@ -201,6 +201,28 @@ describe("cancelling a run", () => {
   });
 });
 
+describe("think time", () => {
+  it("makes each worker pause after a response, without adding to the latency", async () => {
+    const { recorder, elapsedMs } = await run({ url: `${server.url}/ok`, requests: 5, concurrency: 1, think: { min: 40, max: 40 } });
+    assert.equal(recorder.requests, 5);
+    assert.ok(elapsedMs >= 190, `5 requests with 40 ms pauses took ${elapsedMs} ms`);
+    assert.ok(recorder.histogram.max < 35, `latency ${recorder.histogram.max} ms should not include the pause`);
+  });
+
+  it("uses a random pause within the range", async () => {
+    const { elapsedMs } = await run({ url: `${server.url}/ok`, requests: 6, concurrency: 1, think: { min: 20, max: 60 } });
+    assert.ok(elapsedMs >= 6 * 20 - 5 && elapsedMs < 6 * 60 + 400, `took ${elapsedMs} ms`);
+  });
+
+  it("stops waiting when the run is cancelled", async () => {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 100);
+    const started = performance.now();
+    await run({ url: `${server.url}/ok`, duration: 60_000, concurrency: 1, think: { min: 30_000, max: 30_000 }, signal: controller.signal });
+    assert.ok(performance.now() - started < 2000, "still waiting for the pause");
+  });
+});
+
 describe("latency under a rate", () => {
   it("includes the time a request waited because earlier responses were slow", async () => {
     // One worker, a request due every 50 ms, but each response takes 100 ms: the schedule

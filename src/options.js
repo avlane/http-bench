@@ -34,6 +34,8 @@ Options:
       --body-file FILE read the request body from FILE
       --requests-file FILE  send the requests described in FILE (a JSON array or JSON Lines),
                        in turn; URLs may be relative to BASE_URL
+      --think TIME     pause this long after each response before a worker sends its next request,
+                       or a random time in a range such as 50ms-150ms (simulates users)
       --rate N         send N requests per second at most, evenly spaced (default: as fast as possible)
       --warmup N|TIME  send N requests (or send for TIME) first and leave them out of the results
       --redirect MODE  follow (default) or manual: with manual a 3xx response is the result
@@ -58,6 +60,7 @@ export const OPTIONS = {
   duration: { type: "string", short: "d" },
   timeout: { type: "string", default: "10s" },
   rate: { type: "string" },
+  think: { type: "string" },
   redirect: { type: "string", default: "follow" },
   warmup: { type: "string" },
   concurrency: { type: "string", short: "c", default: "10" },
@@ -94,6 +97,20 @@ function positiveDuration(name, text) {
   }
   if (ms === 0) throw new UsageError(`--${name} must be longer than zero`);
   return ms;
+}
+
+/** "100ms" or "50ms-150ms" as {min, max} in milliseconds. */
+export function parseThink(text) {
+  const [low, high, ...extra] = text.split("-");
+  if (extra.length > 0) throw new UsageError(`--think must be a duration or a range such as 50ms-150ms, got '${text}'`);
+  try {
+    const min = parseDuration(low);
+    const max = high === undefined ? min : parseDuration(high);
+    if (max < min) throw new Error("the range is backwards");
+    return { min, max };
+  } catch (error) {
+    throw new UsageError(`--think: ${error.message}`);
+  }
 }
 
 function parseBaseUrl(text) {
@@ -189,6 +206,7 @@ export function buildConfig(values, positionals) {
     body: targets[0].body,
     timeout: positiveDuration("timeout", values.timeout),
     redirect: values.redirect,
+    think: values.think === undefined ? undefined : parseThink(values.think),
     rate,
     warmup,
     requests: values.requests !== undefined ? positiveInteger("requests", values.requests) : duration === undefined ? 100 : undefined,

@@ -32,6 +32,8 @@ export function createPacer(rate, { now = () => performance.now(), wait = sleep 
  * is already in flight when the time is up is allowed to finish.
  * `targets` ([{url, method, headers, body}]) are sent in turn; a single `url` is a short way of
  * giving one target.
+ * With `think` ({min, max} in milliseconds) a worker pauses that long after each response, as
+ * a person reading a page would; the pause is not part of any latency.
  * With `rate` (requests per second) the requests are spread evenly instead of being sent as
  * fast as the responses allow; `concurrency` is then the maximum in flight, and latency is
  * measured from the time a request was due, not from when a free worker got to send it.
@@ -53,7 +55,7 @@ export async function run({ warmup, recorder = new Recorder(), signal, ...option
   return runPhase({ ...options, signal }, recorder);
 }
 
-async function runPhase({ targets, url, requests, duration, concurrency, rate, method = "GET", headers, body, timeout, redirect, signal: stop, fetchImpl = globalThis.fetch }, recorder) {
+async function runPhase({ targets, url, requests, duration, concurrency, rate, method = "GET", headers, body, timeout, redirect, think, signal: stop, fetchImpl = globalThis.fetch }, recorder) {
   const list = targets ?? [{ url, method, headers, body }];
   const limit = requests ?? Infinity;
   const pace = rate ? createPacer(rate) : null;
@@ -92,6 +94,10 @@ async function runPhase({ targets, url, requests, duration, concurrency, rate, m
         outcome = { error: describeError(error) };
       }
       recorder.record(outcome, performance.now() - started);
+      if (think && !stop?.aborted) {
+        const pause = think.min + Math.random() * (think.max - think.min);
+        await sleep(pause, undefined, { signal: stop }).catch(() => {}); // a cancelled run stops waiting
+      }
     }
   }
   await Promise.all(Array.from({ length: Math.min(concurrency, limit) }, worker));
