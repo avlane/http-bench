@@ -39,6 +39,7 @@ Options:
       --rate N         send N requests per second at most, evenly spaced (default: as fast as possible)
       --warmup N|TIME  send N requests (or send for TIME) first and leave them out of the results
       --redirect MODE  follow (default) or manual: with manual a 3xx response is the result
+      --no-keepalive   open a new connection for every request (sends Connection: close)
       --timeout TIME   give up on a request after this long (default: 10s)
       --percentiles LIST  latency percentiles to report, e.g. 50,95,99.9 (default: 50,75,90,95,99,99.9)
       --threshold EXPR  fail (exit 1) unless EXPR holds, e.g. p99<250ms, errors<1%, rps>500 (repeatable)
@@ -61,6 +62,7 @@ export const OPTIONS = {
   timeout: { type: "string", default: "10s" },
   rate: { type: "string" },
   think: { type: "string" },
+  "no-keepalive": { type: "boolean" },
   redirect: { type: "string", default: "follow" },
   warmup: { type: "string" },
   concurrency: { type: "string", short: "c", default: "10" },
@@ -156,6 +158,7 @@ export function buildConfig(values, positionals) {
   if (!["follow", "manual"].includes(values.redirect)) throw new UsageError(`--redirect must be 'follow' or 'manual', got '${values.redirect}'`);
   if (values.user !== undefined && !values.user.includes(":")) throw new UsageError("--user must look like USER:PASSWORD");
   const headerLines = [...(values.header ?? [])];
+  if (values["no-keepalive"]) headerLines.push("Connection: close");
   if (values.user !== undefined) headerLines.push(`Authorization: Basic ${Buffer.from(values.user).toString("base64")}`);
   const userAgent = `http-bench/${pkg.version}`;
   let targets;

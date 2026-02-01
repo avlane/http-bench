@@ -543,6 +543,17 @@ describe("cli", () => {
     }
   });
 
+  it("connections are reused by default and --no-keepalive opens a new one each time", async () => {
+    server.requests.length = 0;
+    await run(["-n", "6", "-c", "1", `${server.url}/ok`]);
+    assert.ok(new Set(server.requests.map((r) => r.port)).size <= 2, "requests should share connections");
+    server.requests.length = 0;
+    const { code } = await run(["-n", "6", "-c", "1", "--no-keepalive", `${server.url}/ok`]);
+    assert.equal(code, 0);
+    assert.equal(new Set(server.requests.map((r) => r.port)).size, 6);
+    assert.ok(server.requests.every((r) => r.headers.connection === "close"));
+  });
+
   it("rejects bad durations", async () => {
     for (const bad of ["10", "fast", "0s"]) {
       const { code, stderr } = await run(["-d", bad, server.url]);

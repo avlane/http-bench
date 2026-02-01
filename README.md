@@ -55,3 +55,5 @@ request: `{{i}}` (request number), `{{uuid}}`, `{{timestamp}}` (ms), `{{rand:1-1
       -b '{"id": {{i}}, "key": "{{uuid}}"}' 'http://localhost:3000/items/{{rand:1-5000}}'
 `--format markdown` prints a table for pull request comments, and `-o report.json` writes the report to a
 file instead of standard output.
+By default connections are kept alive and reused, like a browser or a client library does.
+`--no-keepalive` opens a new connection for every request, which measures connection setup too.
