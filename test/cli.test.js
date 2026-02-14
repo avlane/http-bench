@@ -376,6 +376,26 @@ describe("cli", () => {
     }
   });
 
+  it("reports each request definition separately when there are several", async () => {
+    const { dir, cleanup } = tempFile(JSON.stringify([{ url: "/ok" }, { url: "/slow?ms=40" }, { url: "/status/500" }]));
+    try {
+      const { stdout } = await run(["--requests-file", dir, "-n", "30", "-c", "3", server.url]);
+      const table = stdout.split("\nBy request\n")[1].trimEnd().split("\n\n")[0].split("\n");
+      assert.match(table[0], /requests +failed +p50 +p99 +request/);
+      assert.equal(table.length, 4);
+      assert.match(table[1], /^ +10 +0 +[\d.]+ m?s +[\d.]+ m?s +GET \/ok$/);
+      assert.match(table[2], /^ +10 +0 +\d+(\.\d)? ms +\d+(\.\d)? ms +GET \/slow\?ms=40$/);
+      assert.match(table[3], /^ +10 +10 +[\d.]+ m?s +[\d.]+ m?s +GET \/status\/500$/);
+      const doc = JSON.parse((await run(["--json", "--requests-file", dir, "-n", "9", server.url])).stdout);
+      assert.deepEqual(doc.requestsByDefinition.map((row) => [row.method, new URL(row.url).pathname, row.requests, row.failed]),
+        [["GET", "/ok", 3, 0], ["GET", "/slow", 3, 0], ["GET", "/status/500", 3, 3]]);
+      const single = await run(["-n", "5", `${server.url}/ok`]);
+      assert.ok(!single.stdout.includes("By request"));
+    } finally {
+      cleanup();
+    }
+  });
+
   it("lists the requests in the JSON config", async () => {
     const { dir, cleanup } = tempFile(JSON.stringify([{ url: "/ok" }, { url: "/created", method: "POST", body: "abc" }]));
     try {

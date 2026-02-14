@@ -51,6 +51,14 @@ export function formatText(config, analysis) {
     lines.push(`  max   ${formatMs(latency.max)}`);
     lines.push("", "Histogram", ...histogramLines(analysis.histogram));
   }
+  if (analysis.byTarget.length > 1) {
+    lines.push("", "By request", "  requests  failed  p50        p99        request");
+    for (const row of analysis.byTarget) {
+      const { method, url } = config.targets[row.index];
+      const location = new URL(url);
+      lines.push(`  ${String(row.requests).padStart(8)}  ${String(row.failed).padStart(6)}  ${formatMs(row.p50).padEnd(9)}  ${formatMs(row.p99).padEnd(9)}  ${method} ${location.pathname}${location.search}`);
+    }
+  }
   if (analysis.comparison) lines.push("", ...comparisonLines(analysis.comparison));
   if (analysis.thresholds?.length > 0) {
     lines.push("", "Thresholds");
@@ -118,6 +126,7 @@ export function buildDocument(config, analysis, version) {
     statusCodes: analysis.statusCodes,
     errors: analysis.errorCounts,
     timeline: analysis.timeline,
+    ...(analysis.byTarget.length > 1 ? { requestsByDefinition: analysis.byTarget.map((row) => ({ ...row, method: config.targets[row.index].method, url: config.targets[row.index].url })) } : {}),
     thresholds: (analysis.thresholds ?? []).map(({ expression, actual, passed }) => ({ expression, actual, passed })),
   };
   if (analysis.comparison) document.comparison = analysis.comparison;

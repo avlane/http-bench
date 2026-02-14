@@ -14,6 +14,18 @@ export class Recorder {
     this.statusCodes = new Map();
     this.errorCounts = new Map(); // "timeout", "ECONNREFUSED", "HTTP 503", ...
     this.timeline = []; // [{requests, failed}] for each second of the run
+    this.targets = new Map(); // target index -> {requests, failed, histogram}, when targets are told apart
+  }
+
+  #recordTarget(target, { latency, status, error }) {
+    let entry = this.targets.get(target);
+    if (!entry) {
+      entry = { requests: 0, failed: 0, histogram: new LatencyHistogram({ precision: 0.02 }) };
+      this.targets.set(target, entry);
+    }
+    entry.requests += 1;
+    if (error !== undefined || status >= 400) entry.failed += 1;
+    if (error === undefined) entry.histogram.record(Math.max(0, latency));
   }
 
   #increment(map, key) {
@@ -23,9 +35,11 @@ export class Recorder {
   /**
    * `{latency, status, bytes}` for a response, `{error}` for a request that failed to get one.
    * `elapsedMs` is how long into the run the request finished, for the per-second timeline.
+   * `target` is the index of the request definition, to report them one by one.
    */
-  record({ latency, status, error, bytes = 0 }, elapsedMs = 0) {
+  record({ latency, status, error, bytes = 0 }, elapsedMs = 0, target = undefined) {
     this.requests += 1;
+    if (target !== undefined) this.#recordTarget(target, { latency, status, error });
     const second = Math.max(0, Math.floor(elapsedMs / 1000));
     while (this.timeline.length <= second) this.timeline.push({ requests: 0, failed: 0 });
     this.timeline[second].requests += 1;

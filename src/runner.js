@@ -65,8 +65,9 @@ async function runPhase({ targets, url, requests, duration, concurrency, rate, m
   async function worker() {
     while (issued < limit && performance.now() < deadline && !stop?.aborted) {
       issued += 1;
-      const listed = list[(issued - 1) % list.length];
-      const target = listed.render ? listed.render(issued) : listed;
+      const issued_ = issued; // this request's number, which `issued` no longer is once other workers go on
+      const listed = list[(issued_ - 1) % list.length];
+      const target = listed.render ? listed.render(issued_) : listed;
       let start;
       if (pace) {
         // With a rate, a request is "due" at its time slot. If the previous responses were
@@ -93,7 +94,7 @@ async function runPhase({ targets, url, requests, duration, concurrency, rate, m
         if (stop?.aborted) break; // cancelled by the caller: not a result
         outcome = { error: describeError(error) };
       }
-      recorder.record(outcome, performance.now() - started);
+      recorder.record(outcome, performance.now() - started, list.length > 1 ? (issued_ - 1) % list.length : undefined);
       if (think && !stop?.aborted) {
         const pause = think.min + Math.random() * (think.max - think.min);
         await sleep(pause, undefined, { signal: stop }).catch(() => {}); // a cancelled run stops waiting

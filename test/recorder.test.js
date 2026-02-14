@@ -35,6 +35,27 @@ describe("Recorder", () => {
     assert.deepEqual(analyze({ recorder, elapsedMs: 4000 }).timeline[3], { second: 3, requests: 1, failed: 1 });
   });
 
+  it("tells targets apart when asked to", () => {
+    const recorder = new Recorder();
+    recorder.record({ latency: 4, status: 200 }, 0, 0);
+    recorder.record({ latency: 40, status: 200 }, 0, 1);
+    recorder.record({ latency: 60, status: 500 }, 0, 1);
+    recorder.record({ error: "timeout" }, 0, 1);
+    assert.equal(recorder.targets.get(0).requests, 1);
+    assert.deepEqual([recorder.targets.get(1).requests, recorder.targets.get(1).failed, recorder.targets.get(1).histogram.count], [3, 2, 2]);
+    const rows = analyze({ recorder, elapsedMs: 1000 }).byTarget;
+    assert.deepEqual(rows.map((r) => [r.index, r.requests, r.failed]), [[0, 1, 0], [1, 3, 2]]);
+    assert.equal(rows[0].p50, 4);
+    assert.equal(rows[1].max, 60);
+  });
+
+  it("does not track targets unless told which one a request was for", () => {
+    const recorder = new Recorder();
+    recorder.record({ latency: 1, status: 200 });
+    assert.equal(recorder.targets.size, 0);
+    assert.deepEqual(analyze({ recorder, elapsedMs: 1000 }).byTarget, []);
+  });
+
   it("does not put failed requests into the latency histogram", () => {
     const recorder = new Recorder();
     recorder.record({ error: "timeout" });

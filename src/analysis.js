@@ -54,6 +54,15 @@ export function analyze({ recorder, elapsedMs }, percentiles = DEFAULT_PERCENTIL
     requestsPerSecond: elapsedMs > 0 ? recorder.requests / (elapsedMs / 1000) : 0,
     latency,
     histogram: histogram.rows(),
+    byTarget: [...recorder.targets].toSorted((a, b) => a[0] - b[0]).map(([index, entry]) => ({
+      index,
+      requests: entry.requests,
+      failed: entry.failed,
+      mean: entry.histogram.mean ?? null,
+      p50: entry.histogram.percentile(50),
+      p99: entry.histogram.percentile(99),
+      max: entry.histogram.max === -Infinity ? null : entry.histogram.max,
+    })),
     timeline: recorder.timeline.map(({ requests, failed }, second) => ({ second, requests, failed })),
     percentile: (p) => histogram.percentile(p),
   };
