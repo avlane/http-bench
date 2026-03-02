@@ -1,6 +1,6 @@
 import fs from "node:fs";
 
-import { buildRequest } from "./request.js";
+import { buildRequest, extractCredentials } from "./request.js";
 
 const ENTRY_FIELDS = new Set(["url", "method", "headers", "body", "json"]);
 
@@ -60,7 +60,10 @@ export function loadRequestsFile(file, { baseUrl, headers = [], method, userAgen
     }
     if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error(`${where}: unsupported protocol ${url.protocol}`);
 
+    const credentials = extractCredentials(url);
+    url = credentials.url;
     const own = Object.entries(entry.headers ?? {}).map(([name, value]) => `${name}: ${value}`);
+    if (credentials.authorization) own.push(credentials.authorization);
     const ownNames = new Set(Object.keys(entry.headers ?? {}).map((name) => name.toLowerCase()));
     const inherited = headers.filter((line) => !ownNames.has(line.slice(0, line.indexOf(":")).trim().toLowerCase()));
     const lines = [...inherited, ...own];

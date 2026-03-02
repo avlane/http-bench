@@ -189,6 +189,27 @@ describe("cli", () => {
     }
   });
 
+  it("credentials in the URL become basic authentication and are never printed", async () => {
+    server.requests.length = 0;
+    const withCredentials = server.url.replace("http://", "http://alice:s3cret@");
+    const { code, stdout } = await run(["--json", "-n", "2", `${withCredentials}/ok`]);
+    assert.equal(code, 0);
+    const expected = `Basic ${Buffer.from("alice:s3cret").toString("base64")}`;
+    assert.ok(server.requests.every((r) => r.headers.authorization === expected));
+    const doc = JSON.parse(stdout);
+    assert.equal(doc.config.url, `${server.url}/ok`);
+    assert.equal(doc.config.headers.authorization, "<redacted>");
+    assert.ok(!stdout.includes("s3cret"));
+    const text = (await run(["-n", "1", `${withCredentials}/ok`])).stdout;
+    assert.ok(text.startsWith(`GET ${server.url}/ok\n`));
+  });
+
+  it("an explicit --user wins over credentials in the URL", async () => {
+    server.requests.length = 0;
+    await run(["-n", "1", "-u", "bob:pw", `${server.url.replace("http://", "http://alice:s3cret@")}/ok`]);
+    assert.equal(server.requests[0].headers.authorization, `Basic ${Buffer.from("bob:pw").toString("base64")}`);
+  });
+
   it("a body without a method means POST", async () => {
     server.requests.length = 0;
     await run(["-n", "1", "-b", "x", `${server.url}/echo`]);

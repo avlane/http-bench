@@ -1,7 +1,7 @@
 import fs from "node:fs";
 
 import { parseDuration } from "./duration.js";
-import { buildRequest } from "./request.js";
+import { buildRequest, extractCredentials } from "./request.js";
 import { loadRequestsFile } from "./scenario.js";
 import { templateTarget } from "./template.js";
 import { parseThreshold } from "./thresholds.js";
@@ -123,7 +123,7 @@ function parseBaseUrl(text) {
     throw new UsageError(`not a valid URL: ${text}`);
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") throw new UsageError(`unsupported protocol ${url.protocol} (use http or https)`);
-  return url;
+  return extractCredentials(url);
 }
 
 export const FORMATS = ["text", "json", "markdown"];
@@ -141,7 +141,8 @@ export function chooseFormat(values) {
 export function buildConfig(values, positionals) {
   const requestsFile = values["requests-file"];
   if (positionals.length > 1 || (positionals.length === 0 && requestsFile === undefined)) throw new UsageError("expected exactly one URL");
-  const baseUrl = positionals.length === 1 ? parseBaseUrl(positionals[0]) : undefined;
+  const parsedUrl = positionals.length === 1 ? parseBaseUrl(positionals[0]) : undefined;
+  const baseUrl = parsedUrl?.url;
 
   const duration = values.duration === undefined ? undefined : positiveDuration("duration", values.duration);
   let warmup;
@@ -159,6 +160,7 @@ export function buildConfig(values, positionals) {
   if (values.user !== undefined && !values.user.includes(":")) throw new UsageError("--user must look like USER:PASSWORD");
   const headerLines = [...(values.header ?? [])];
   if (values["no-keepalive"]) headerLines.push("Connection: close");
+  if (parsedUrl?.authorization && values.user === undefined) headerLines.push(parsedUrl.authorization);
   if (values.user !== undefined) headerLines.push(`Authorization: Basic ${Buffer.from(values.user).toString("base64")}`);
   const userAgent = `http-bench/${pkg.version}`;
   let targets;

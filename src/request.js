@@ -10,6 +10,21 @@ export function parseHeader(text) {
   return [name, text.slice(colon + 1).trim()];
 }
 
+/**
+ * fetch refuses URLs with a user name and password, so every request would fail with a
+ * TypeError. Take them out of the URL and return them as a basic authentication header
+ * line instead, as curl does: {url, authorization}.
+ */
+export function extractCredentials(url) {
+  if (url.username === "" && url.password === "") return { url, authorization: null };
+  const copy = new URL(url.href);
+  copy.username = "";
+  copy.password = "";
+  const user = decodeURIComponent(url.username);
+  const password = decodeURIComponent(url.password);
+  return { url: copy, authorization: `Authorization: Basic ${Buffer.from(`${user}:${password}`).toString("base64")}` };
+}
+
 const METHODS_WITHOUT_BODY = new Set(["GET", "HEAD"]);
 
 /**

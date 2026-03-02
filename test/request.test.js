@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 
-import { buildRequest, parseHeader } from "../src/request.js";
+import { buildRequest, extractCredentials, parseHeader } from "../src/request.js";
 
 describe("parseHeader", () => {
   it("splits at the first colon and trims", () => {
@@ -17,6 +17,22 @@ describe("parseHeader", () => {
     for (const bad of ["nocolon", ": value", "Bad Name: x", "", "Na(me: x"]) {
       assert.throws(() => parseHeader(bad), /invalid header/, bad);
     }
+  });
+});
+
+describe("extractCredentials", () => {
+  it("moves the user name and password into a basic authentication header line", () => {
+    const { url, authorization } = extractCredentials(new URL("http://alice:p%40ss@example.test:8080/a?b=1"));
+    assert.equal(url.href, "http://example.test:8080/a?b=1");
+    assert.equal(authorization, `Authorization: Basic ${Buffer.from("alice:p@ss").toString("base64")}`);
+  });
+
+  it("handles a user name without a password, and URLs without credentials", () => {
+    const { url, authorization } = extractCredentials(new URL("http://token@example.test/"));
+    assert.equal(url.href, "http://example.test/");
+    assert.equal(authorization, `Authorization: Basic ${Buffer.from("token:").toString("base64")}`);
+    const plain = new URL("http://example.test/");
+    assert.deepEqual(extractCredentials(plain), { url: plain, authorization: null });
   });
 });
 
