@@ -23,7 +23,9 @@ describe("startProgress", () => {
     recorder.record({ latency: 1, status: 200 });
     recorder.record({ error: "timeout" });
     clock = 2000;
-    await new Promise((resolve) => setTimeout(resolve, 35));
+    // Wait for a few frames instead of for a fixed time: timers are late on a busy machine.
+    const giveUp = Date.now() + 2000;
+    while (written.length < 3 && Date.now() < giveUp) await new Promise((resolve) => setTimeout(resolve, 5));
     stop();
     const frames = written.slice(0, -1);
     assert.ok(frames.length >= 2, `${frames.length} frames`);
