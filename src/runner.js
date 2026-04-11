@@ -32,6 +32,7 @@ export function createPacer(rate, { now = () => performance.now(), wait = sleep 
  * is already in flight when the time is up is allowed to finish.
  * `targets` ([{url, method, headers, body}]) are sent in turn; a single `url` is a short way of
  * giving one target.
+ * With `rampUp` (milliseconds) the workers start one after the other over that time.
  * With `think` ({min, max} in milliseconds) a worker pauses that long after each response, as
  * a person reading a page would; the pause is not part of any latency.
  * With `rate` (requests per second) the requests are spread evenly instead of being sent as
@@ -55,14 +56,19 @@ export async function run({ warmup, recorder = new Recorder(), signal, ...option
   return runPhase({ ...options, signal }, recorder);
 }
 
-async function runPhase({ targets, url, requests, duration, concurrency, rate, method = "GET", headers, body, timeout, redirect, think, signal: stop, fetchImpl = globalThis.fetch }, recorder) {
+async function runPhase({ targets, url, requests, duration, concurrency, rate, method = "GET", headers, body, timeout, redirect, think, rampUp, signal: stop, fetchImpl = globalThis.fetch }, recorder) {
   const list = targets ?? [{ url, method, headers, body }];
   const limit = requests ?? Infinity;
   const pace = rate ? createPacer(rate) : null;
   let issued = 0;
   const started = performance.now();
   const deadline = duration === undefined ? Infinity : started + duration;
-  async function worker() {
+  const workers = Math.min(concurrency, limit);
+  async function worker(_, index) {
+    if (rampUp && index > 0) {
+      // Worker k joins after k/workers of the ramp-up, so the load grows in equal steps.
+      await sleep((index * rampUp) / workers, undefined, { signal: stop }).catch(() => {});
+    }
     while (issued < limit && performance.now() < deadline && !stop?.aborted) {
       issued += 1;
       const issued_ = issued; // this request's number, which `issued` no longer is once other workers go on
@@ -101,6 +107,6 @@ async function runPhase({ targets, url, requests, duration, concurrency, rate, m
       }
     }
   }
-  await Promise.all(Array.from({ length: Math.min(concurrency, limit) }, worker));
+  await Promise.all(Array.from({ length: workers }, worker));
   return { recorder, elapsedMs: performance.now() - started, interrupted: Boolean(stop?.aborted) };
 }

@@ -59,7 +59,7 @@ describe("cli", () => {
     assert.equal(doc.version, 1);
     assert.equal(doc.tool.name, "http-bench");
     assert.deepEqual(doc.config, {
-      url: `${server.url}/ok`, method: "GET", concurrency: 4, rate: null, thinkMs: null, latencyFrom: "sent", redirect: "follow", template: false, requests: 40, durationMs: null, warmup: null,
+      url: `${server.url}/ok`, method: "GET", concurrency: 4, rate: null, rampUpMs: null, thinkMs: null, latencyFrom: "sent", redirect: "follow", template: false, requests: 40, durationMs: null, warmup: null,
       timeoutMs: 10000, bodyBytes: 0,
       headers: { authorization: "<redacted>", "x-test": "1", "user-agent": doc.config.headers["user-agent"] },
     });
@@ -568,6 +568,17 @@ describe("cli", () => {
     setTimeout(() => again.abort(), 150);
     await main(["--json", "-d", "60s", `${server.url}/slow?ms=20`], { ...json.io, signal: again.signal });
     assert.equal(JSON.parse(json.out.stdout).summary.interrupted, true);
+  });
+
+  it("--ramp-up spreads the start of the workers", async () => {
+    server.requests.length = 0;
+    const { code } = await run(["-n", "3", "-c", "3", "--ramp-up", "300ms", `${server.url}/slow?ms=300`]);
+    assert.equal(code, 0);
+    const arrivals = server.requests.map((r) => r.at).toSorted((a, b) => a - b);
+    assert.ok(arrivals[2] - arrivals[0] >= 150, `the three workers started within ${arrivals[2] - arrivals[0]} ms`);
+    const doc = JSON.parse((await run(["--json", "-n", "3", "--ramp-up", "50ms", `${server.url}/ok`])).stdout);
+    assert.equal(doc.config.rampUpMs, 50);
+    for (const bad of ["0s", "soon", "5"]) assert.equal((await run(["--ramp-up", bad, server.url])).code, 2, bad);
   });
 
   it("--think takes a duration or a range", async () => {

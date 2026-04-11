@@ -15,6 +15,7 @@ export function describeConfig(config) {
     method: config.method,
     concurrency: config.concurrency,
     rate: config.rate ?? null,
+    rampUpMs: config.rampUp ?? null,
     thinkMs: config.think ? [config.think.min, config.think.max] : null,
     latencyFrom: config.rate ? "scheduled" : "sent",
     redirect: config.redirect ?? "follow",

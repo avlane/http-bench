@@ -34,6 +34,7 @@ Options:
       --body-file FILE read the request body from FILE
       --requests-file FILE  send the requests described in FILE (a JSON array or JSON Lines),
                        in turn; URLs may be relative to BASE_URL
+      --ramp-up TIME   start the workers one by one over this time instead of all at once
       --think TIME     pause this long after each response before a worker sends its next request,
                        or a random time in a range such as 50ms-150ms (simulates users)
       --rate N         send N requests per second at most, evenly spaced (default: as fast as possible)
@@ -62,6 +63,7 @@ export const OPTIONS = {
   timeout: { type: "string", default: "10s" },
   rate: { type: "string" },
   think: { type: "string" },
+  "ramp-up": { type: "string" },
   "no-keepalive": { type: "boolean" },
   redirect: { type: "string", default: "follow" },
   warmup: { type: "string" },
@@ -211,6 +213,7 @@ export function buildConfig(values, positionals) {
     body: targets[0].body,
     timeout: positiveDuration("timeout", values.timeout),
     redirect: values.redirect,
+    rampUp: values["ramp-up"] === undefined ? undefined : positiveDuration("ramp-up", values["ramp-up"]),
     think: values.think === undefined ? undefined : parseThink(values.think),
     rate,
     warmup,

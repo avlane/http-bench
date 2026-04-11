@@ -32,7 +32,7 @@ export async function startServer() {
     req.on("data", (chunk) => chunks.push(chunk));
     req.on("end", () => {
       const body = Buffer.concat(chunks);
-      requests.push({ method: req.method, path: url.pathname, query: url.search, headers: req.headers, body, port: req.socket.remotePort });
+      requests.push({ method: req.method, path: url.pathname, query: url.search, headers: req.headers, body, port: req.socket.remotePort, at: performance.now() });
       const send = (status, text, headers = {}) => {
         res.writeHead(status, { "content-type": "text/plain", ...headers });
         res.end(text);

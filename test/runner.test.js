@@ -201,6 +201,34 @@ describe("cancelling a run", () => {
   });
 });
 
+describe("ramp-up", () => {
+  it("starts the workers one after the other", async () => {
+    server.requests.length = 0;
+    // Each worker sends one request that takes long enough to still be running when the last starts.
+    const { recorder } = await run({ url: `${server.url}/slow?ms=400`, requests: 4, concurrency: 4, rampUp: 400 });
+    assert.equal(recorder.requests, 4);
+    const arrivals = server.requests.map((r) => r.at).toSorted((a, b) => a - b);
+    const gaps = arrivals.slice(1).map((time, i) => time - arrivals[i]);
+    assert.ok(gaps.every((gap) => gap >= 70 && gap < 250), `gaps between the workers' first requests: ${gaps.map((g) => g.toFixed(0))}`);
+  });
+
+  it("the first worker starts at once", async () => {
+    const started = performance.now();
+    server.requests.length = 0;
+    await run({ url: `${server.url}/ok`, requests: 1, concurrency: 1, rampUp: 5000 });
+    assert.ok(performance.now() - started < 1000);
+    assert.equal(server.requests.length, 1);
+  });
+
+  it("a cancelled run does not wait for workers that have not started yet", async () => {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 100);
+    const started = performance.now();
+    await run({ url: `${server.url}/ok`, duration: 60_000, concurrency: 3, rampUp: 30_000, signal: controller.signal });
+    assert.ok(performance.now() - started < 2000);
+  });
+});
+
 describe("think time", () => {
   it("makes each worker pause after a response, without adding to the latency", async () => {
     const { recorder, elapsedMs } = await run({ url: `${server.url}/ok`, requests: 5, concurrency: 1, think: { min: 40, max: 40 } });
