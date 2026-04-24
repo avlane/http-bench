@@ -29,10 +29,20 @@ describe("Recorder", () => {
     recorder.record({ latency: 1, status: 200 }, 900);
     recorder.record({ latency: 1, status: 500 }, 1000);
     recorder.record({ error: "timeout" }, 3500);
-    assert.deepEqual(recorder.timeline, [
+    assert.deepEqual(recorder.timeline.map(({ requests, failed }) => ({ requests, failed })), [
       { requests: 2, failed: 0 }, { requests: 1, failed: 1 }, { requests: 0, failed: 0 }, { requests: 1, failed: 1 },
     ]);
-    assert.deepEqual(analyze({ recorder, elapsedMs: 4000 }).timeline[3], { second: 3, requests: 1, failed: 1 });
+    assert.deepEqual(analyze({ recorder, elapsedMs: 4000 }).timeline[3], { second: 3, requests: 1, failed: 1, meanLatencyMs: null });
+  });
+
+  it("averages the latency of the responses in each second", () => {
+    const recorder = new Recorder();
+    recorder.record({ latency: 10, status: 200 }, 100);
+    recorder.record({ latency: 30, status: 200 }, 800);
+    recorder.record({ error: "timeout" }, 900);
+    recorder.record({ latency: 100, status: 200 }, 1500);
+    const { timeline } = analyze({ recorder, elapsedMs: 2000 });
+    assert.deepEqual(timeline.map((t) => t.meanLatencyMs), [20, 100]);
   });
 
   it("tells targets apart when asked to", () => {

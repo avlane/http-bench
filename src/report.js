@@ -41,6 +41,10 @@ export function formatText(config, analysis) {
     lines.push(`${analysis.errors} failed (${detail})`);
   }
   if (analysis.timeline.length >= 3) lines.push("", `Requests per second  ${sparkline(analysis.timeline.map((t) => t.requests))}  (peak ${Math.max(...analysis.timeline.map((t) => t.requests))})`);
+  if (analysis.timeline.length >= 3 && analysis.timeline.some((t) => t.meanLatencyMs !== null)) {
+    const means = analysis.timeline.map((t) => t.meanLatencyMs ?? 0);
+    lines.push(`Mean latency         ${sparkline(means)}  (peak ${formatMs(Math.max(...means))})`);
+  }
   const statuses = Object.entries(analysis.statusCodes);
   if (statuses.length > 0) {
     lines.push("", "Status codes", ...statuses.map(([status, count]) => `  ${status}  ${count}`));

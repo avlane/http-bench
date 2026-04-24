@@ -13,7 +13,7 @@ export class Recorder {
     this.bytes = 0;
     this.statusCodes = new Map();
     this.errorCounts = new Map(); // "timeout", "ECONNREFUSED", "HTTP 503", ...
-    this.timeline = []; // [{requests, failed}] for each second of the run
+    this.timeline = []; // [{requests, failed, responses, latencySum}] for each second of the run
     this.targets = new Map(); // target index -> {requests, failed, histogram}, when targets are told apart
   }
 
@@ -41,8 +41,12 @@ export class Recorder {
     this.requests += 1;
     if (target !== undefined) this.#recordTarget(target, { latency, status, error });
     const second = Math.max(0, Math.floor(elapsedMs / 1000));
-    while (this.timeline.length <= second) this.timeline.push({ requests: 0, failed: 0 });
+    while (this.timeline.length <= second) this.timeline.push({ requests: 0, failed: 0, responses: 0, latencySum: 0 });
     this.timeline[second].requests += 1;
+    if (error === undefined) {
+      this.timeline[second].responses += 1;
+      this.timeline[second].latencySum += Math.max(0, latency);
+    }
     if (error !== undefined || status >= 400) this.timeline[second].failed += 1;
     if (error !== undefined) {
       this.#increment(this.errorCounts, error);
