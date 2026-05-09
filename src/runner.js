@@ -1,7 +1,6 @@
 import { performance } from "node:perf_hooks";
-import { setTimeout as sleep } from "node:timers/promises";
-
 import { Recorder } from "./recorder.js";
+import { sleep } from "./sleep.js";
 
 /** A short name for why a request failed: a system error code, "timeout" or the error name. */
 export function describeError(error) {
@@ -12,9 +11,10 @@ export function describeError(error) {
 /**
  * A pacer for `rate` requests per second: each call reserves the next time slot, waits for it
  * and returns the slot's time. Slots are reserved immediately, so concurrent callers queue up
- * in order and a slow response doesn't shift the schedule of the next ones.
+ * in order and a slow response doesn't shift the schedule of the next ones. Waiting ends early
+ * when `signal` is aborted.
  */
-export function createPacer(rate, { now = () => performance.now(), wait = sleep } = {}) {
+export function createPacer(rate, { now = () => performance.now(), signal, wait = (ms) => sleep(ms, signal) } = {}) {
   const interval = 1000 / rate;
   let next = null;
   return async function pace() {
@@ -59,7 +59,7 @@ export async function run({ warmup, recorder = new Recorder(), signal, ...option
 async function runPhase({ targets, url, requests, duration, concurrency, rate, method = "GET", headers, body, timeout, redirect, think, rampUp, signal: stop, fetchImpl = globalThis.fetch }, recorder) {
   const list = targets ?? [{ url, method, headers, body }];
   const limit = requests ?? Infinity;
-  const pace = rate ? createPacer(rate) : null;
+  const pace = rate ? createPacer(rate, { signal: stop }) : null;
   let issued = 0;
   const started = performance.now();
   const deadline = duration === undefined ? Infinity : started + duration;
@@ -67,7 +67,7 @@ async function runPhase({ targets, url, requests, duration, concurrency, rate, m
   async function worker(_, index) {
     if (rampUp && index > 0) {
       // Worker k joins after k/workers of the ramp-up, so the load grows in equal steps.
-      await sleep((index * rampUp) / workers, undefined, { signal: stop }).catch(() => {});
+      await sleep((index * rampUp) / workers, stop);
     }
     while (issued < limit && performance.now() < deadline && !stop?.aborted) {
       issued += 1;
@@ -103,7 +103,7 @@ async function runPhase({ targets, url, requests, duration, concurrency, rate, m
       recorder.record(outcome, performance.now() - started, list.length > 1 ? (issued_ - 1) % list.length : undefined);
       if (think && !stop?.aborted) {
         const pause = think.min + Math.random() * (think.max - think.min);
-        await sleep(pause, undefined, { signal: stop }).catch(() => {}); // a cancelled run stops waiting
+        await sleep(pause, stop); // a cancelled run stops waiting
       }
     }
   }

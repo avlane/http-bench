@@ -155,6 +155,27 @@ describe("createPacer", () => {
   });
 });
 
+describe("pacing and cancelling", () => {
+  it("a pacer stops waiting for its slot when the signal fires", async () => {
+    const controller = new AbortController();
+    const pace = createPacer(0.1, { signal: controller.signal }); // one slot every ten seconds
+    await pace();
+    setTimeout(() => controller.abort(), 30);
+    const started = performance.now();
+    await pace();
+    assert.ok(performance.now() - started < 1000, "waited for the slot");
+  });
+
+  it("Ctrl-C at a low rate does not wait for the next time slot", async () => {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 150);
+    const started = performance.now();
+    const { interrupted } = await run({ url: `${server.url}/ok`, duration: 60_000, concurrency: 2, rate: 0.1, signal: controller.signal });
+    assert.equal(interrupted, true);
+    assert.ok(performance.now() - started < 2000);
+  });
+});
+
 describe("run with a rate", () => {
   it("spreads the requests out", async () => {
     const { recorder, elapsedMs } = await run({ url: `${server.url}/ok`, requests: 11, concurrency: 5, rate: 50 });

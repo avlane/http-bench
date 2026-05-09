@@ -1,6 +1,6 @@
 # http-bench
 
-A small HTTP load tester built on Node's global `fetch`. No dependencies. Needs Node.js 20 or newer.
+A small HTTP load tester built on Node's global `fetch`. No dependencies. Needs Node.js 22 or newer.
 
 Work in progress. Planned: fixed numbers of requests or a duration, concurrency, warmup,
 percentile latencies, a latency histogram and JSON output.
