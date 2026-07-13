@@ -102,6 +102,23 @@ export function formatMarkdown(config, analysis) {
   return lines.join("\n") + "\n";
 }
 
+/** One line for scripts, followed by the thresholds and regressions that were not met. */
+export function formatQuiet(config, analysis) {
+  const parts = [`${analysis.requests} requests in ${(analysis.elapsedMs / 1000).toFixed(2)} s`, `${analysis.requestsPerSecond.toFixed(1)} req/s`];
+  for (const p of ["50", "99"]) {
+    if (analysis.latency.percentiles[p] !== undefined) parts.push(`p${p} ${formatMs(analysis.latency.percentiles[p])}`);
+  }
+  parts.push(`${analysis.errors} failed`);
+  const lines = [`${parts[0]}: ${parts.slice(1).join(", ")}`];
+  for (const result of analysis.thresholds ?? []) {
+    if (!result.passed) lines.push(`FAIL ${result.expression} (${formatActual(result)})`);
+  }
+  for (const row of analysis.comparison?.rows ?? []) {
+    if (row.regressed) lines.push(`REGRESSION ${row.metric}`);
+  }
+  return lines.join("\n") + "\n";
+}
+
 /** The machine-readable report as an object; the layout is described in the README. */
 export function buildDocument(config, analysis, version) {
   const { latency } = analysis;

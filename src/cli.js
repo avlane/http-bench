@@ -8,7 +8,7 @@ import { startProgress } from "./progress.js";
 import { Recorder } from "./recorder.js";
 import { HELP, OPTIONS, UsageError, buildConfig, chooseFormat } from "./options.js";
 import { evaluateThresholds } from "./thresholds.js";
-import { buildDocument, formatJson, formatMarkdown, formatText } from "./report.js";
+import { buildDocument, formatJson, formatMarkdown, formatQuiet, formatText } from "./report.js";
 import { run } from "./runner.js";
 
 const pkg = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8"));
@@ -76,7 +76,7 @@ export async function main(argv, io = {}) {
       const comparison = compareRuns(baseline, buildDocument(config, analysis, pkg.version), { maxRegression: config.maxRegression });
       analysis.comparison = { baseline: config.compare, ...comparison };
     }
-    const report = format === "json" ? formatJson(config, analysis, pkg.version) : format === "markdown" ? formatMarkdown(config, analysis) : formatText(config, analysis);
+    const report = format === "json" ? formatJson(config, analysis, pkg.version) : format === "markdown" ? formatMarkdown(config, analysis) : values.quiet ? formatQuiet(config, analysis) : formatText(config, analysis);
     if (values.output) writeFileAtomically(values.output, report);
     else stdout.write(report);
     if (result.interrupted) return EXIT_INTERRUPTED;

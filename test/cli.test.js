@@ -522,6 +522,21 @@ describe("cli", () => {
     assert.match(stdout, /PASS {2}p97<10s/);
   });
 
+  it("-q prints one line, plus whatever failed", async () => {
+    const ok = await run(["-q", "-n", "20", `${server.url}/ok`]);
+    assert.equal(ok.code, 0);
+    assert.match(ok.stdout, /^20 requests in \d\.\d\d s: [\d.]+ req\/s, p50 [\d.]+ m?s, p99 [\d.]+ m?s, 0 failed\n$/);
+    const failing = await run(["--quiet", "-n", "10", "--threshold", "p50<0.0001ms", "--threshold", "errors<1%", `${server.url}/ok`]);
+    assert.equal(failing.code, 1);
+    const lines = failing.stdout.trimEnd().split("\n");
+    assert.equal(lines.length, 2);
+    assert.match(lines[1], /^FAIL p50<0\.0001ms \([\d.]+ m?s\)$/);
+    const nothing = await run(["-q", "-n", "2", `${server.url}/drop`]);
+    assert.equal(nothing.code, 3);
+    assert.match(nothing.stdout, /^2 requests in .*: .* 2 failed\n$/);
+    assert.match((await run(["-q", "--json", server.url])).stderr, /--quiet only applies to the text format/);
+  });
+
   it("--format markdown prints a table", async () => {
     const { code, stdout } = await run(["--format", "markdown", "-n", "20", "--threshold", "errors<1%", `${server.url}/ok`]);
     assert.equal(code, 0);

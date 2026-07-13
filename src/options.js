@@ -49,6 +49,7 @@ Options:
   -u, --user USER:PASSWORD  send HTTP basic authentication
       --template       fill in {{i}}, {{uuid}}, {{timestamp}}, {{rand:1-100}} and {{env:NAME}} in the URL,
                        header values and body of every request
+  -q, --quiet          print one summary line (and any failed threshold) instead of the full report
       --progress       show a live status line on stderr while the run is in progress
       --format FORMAT  text (default), json or markdown (a table for pull request comments)
       --json           same as --format json
@@ -79,6 +80,7 @@ export const OPTIONS = {
   "max-regression": { type: "string" },
   user: { type: "string", short: "u" },
   template: { type: "boolean" },
+  quiet: { type: "boolean", short: "q" },
   progress: { type: "boolean" },
   format: { type: "string" },
   output: { type: "string", short: "o" },
@@ -136,7 +138,9 @@ export function chooseFormat(values) {
     throw new UsageError(`--format must be one of ${FORMATS.join(", ")}, got '${values.format}'`);
   }
   if (values.json && values.format !== undefined && values.format !== "json") throw new UsageError("--json conflicts with --format " + values.format);
-  return values.json ? "json" : values.format ?? "text";
+  const format = values.json ? "json" : values.format ?? "text";
+  if (values.quiet && format !== "text") throw new UsageError("--quiet only applies to the text format");
+  return format;
 }
 
 /** Validate the parsed command line and turn it into the settings of a run. */
