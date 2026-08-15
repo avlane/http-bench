@@ -71,6 +71,19 @@ export function formatText(config, analysis) {
   return lines.join("\n") + "\n";
 }
 
+/** Text for a Markdown table cell: a pipe would start a new column, a newline end the row. */
+function cell(text) {
+  return String(text).replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
+}
+
+/** A code span for a table cell; backticks inside the text are handled by using a longer fence. */
+function code(text) {
+  const value = String(text);
+  const fence = "`".repeat(Math.max(0, ...[...value.matchAll(/`+/g)].map((m) => m[0].length)) + 1);
+  const pad = value.startsWith("`") || value.endsWith("`") ? " " : "";
+  return cell(`${fence}${pad}${value}${pad}${fence}`);
+}
+
 /** A table for pull request comments and chat. */
 export function formatMarkdown(config, analysis) {
   const { latency } = analysis;
@@ -78,7 +91,7 @@ export function formatMarkdown(config, analysis) {
   const rows = [
     ["Requests", `${analysis.requests} in ${(analysis.elapsedMs / 1000).toFixed(2)} s with concurrency ${config.concurrency}`],
     ["Succeeded", `${analysis.successes} (${analysis.requests ? ((analysis.successes / analysis.requests) * 100).toFixed(1) : "0.0"}%)`],
-    ["Failed", `${analysis.errors}${analysis.errors > 0 ? ` (${Object.entries(analysis.errorCounts).map(([name, count]) => `${name}: ${count}`).join(", ")})` : ""}`],
+    ["Failed", cell(`${analysis.errors}${analysis.errors > 0 ? ` (${Object.entries(analysis.errorCounts).map(([name, count]) => `${name}: ${count}`).join(", ")})` : ""}`)],
     ["Throughput", `${analysis.requestsPerSecond.toFixed(1)} requests/s`],
     ["Received", formatBytes(analysis.bytes)],
   ];
@@ -87,13 +100,13 @@ export function formatMarkdown(config, analysis) {
     for (const [p, value] of Object.entries(latency.percentiles)) rows.push([`Latency p${p}`, formatMs(value)]);
     rows.push(["Latency max", formatMs(latency.max)]);
   }
-  const lines = [`### http-bench: \`${target}\``, "", "| | |", "| --- | --- |", ...rows.map(([name, value]) => `| ${name} | ${value} |`)];
+  const lines = [`### http-bench: ${code(target)}`, "", "| | |", "| --- | --- |", ...rows.map(([name, value]) => `| ${name} | ${value} |`)];
   if (analysis.thresholds?.length > 0) {
     lines.push("", "| Threshold | Result | Actual |", "| --- | --- | --- |");
-    for (const t of analysis.thresholds) lines.push(`| \`${t.expression}\` | ${t.passed ? "pass" : "**FAIL**"} | ${formatActual(t)} |`);
+    for (const t of analysis.thresholds) lines.push(`| ${code(t.expression)} | ${t.passed ? "pass" : "**FAIL**"} | ${formatActual(t)} |`);
   }
   if (analysis.comparison) {
-    lines.push("", `Compared with \`${analysis.comparison.baseline}\`:`, "", "| Metric | Before | After | Change |", "| --- | --- | --- | --- |");
+    lines.push("", `Compared with ${code(analysis.comparison.baseline)}:`, "", "| Metric | Before | After | Change |", "| --- | --- | --- | --- |");
     for (const row of analysis.comparison.rows) {
       const change = row.change === null ? "new" : `${row.change >= 0 ? "+" : ""}${row.change.toFixed(row.unit === "points" ? 2 : 1)}${row.unit === "points" ? " pts" : "%"}`;
       lines.push(`| ${row.metric} | ${comparisonValue(row, row.before)} | ${comparisonValue(row, row.after)} | ${change}${row.regressed ? " **REGRESSION**" : ""} |`);

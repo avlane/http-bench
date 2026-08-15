@@ -546,6 +546,17 @@ describe("cli", () => {
     assert.match(stdout, /\n\| Threshold \| Result \| Actual \|\n\| --- \| --- \| --- \|\n\| `errors<1%` \| pass \| 0\.00% \|\n$/);
   });
 
+  it("markdown output survives pipes and backticks in the URL", async () => {
+    const { stdout } = await run(["--format", "markdown", "-n", "3", `${server.url}/status/500?filter=a|b&q=\`x\``]);
+    const heading = stdout.split("\n")[0];
+    assert.ok(heading.startsWith("### http-bench: "), heading);
+    // every table row has the same number of unescaped pipes
+    const rows = stdout.split("\n").filter((line) => line.startsWith("| "));
+    assert.ok(rows.length > 4);
+    for (const row of rows.slice(0, 8)) assert.equal(row.replace(/\\\|/g, "").split("|").length, 4, row);
+    assert.match(stdout, /\| Failed \| 3 \(HTTP 500: 3\) \|/);
+  });
+
   it("--output writes the report to a file and leaves stdout empty", async () => {
     const { dir, cleanup } = tempFile("");
     try {
