@@ -101,6 +101,8 @@ HTTP 4xx and 5xx responses count as failures; redirects do not.
 | 3 | no request succeeded (target unreachable, or every response was an error) |
 | 130 | stopped with Ctrl-C; the report covers what was measured so far |
 
+See [CHANGELOG.md](CHANGELOG.md) for what changed between versions.
+
 ## Development
 
     npm test

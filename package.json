@@ -1,6 +1,6 @@
 {
   "name": "http-bench",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "A small HTTP load tester: concurrency, percentile latencies, histograms",
   "type": "module",
   "bin": {
