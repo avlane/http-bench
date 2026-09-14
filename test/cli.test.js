@@ -232,9 +232,22 @@ describe("cli", () => {
   });
 
   it("reports connection errors and exits 3 when nothing could be reached", async () => {
-    const { code, stdout } = await run(["-n", "3", `http://127.0.0.1:${await closedPort()}/`]);
+    const port = await closedPort();
+    const { code, stdout } = await run(["-n", "3", `http://127.0.0.1:${port}/`]);
     assert.equal(code, 3);
-    assert.match(stdout, /\n3 failed \(ECONNREFUSED: 3\)\n/);
+    assert.match(stdout, /\n3 failed \(ECONNREFUSED: 3\)\nHint: nothing is accepting connections on 127\.0\.0\.1:\d+ - is the server running\?\n/);
+  });
+
+  it("explains timeouts and unresolvable names when that is all that happened", async () => {
+    const slow = await run(["-n", "2", "--timeout", "30ms", `${server.url}/slow?ms=400`]);
+    assert.match(slow.stdout, /\nHint: every request timed out after 30\.0 ms; the server may be overloaded, or --timeout too short\.\n/);
+    const unknown = await run(["-n", "1", "--timeout", "3s", "http://no-such-host.invalid/"]);
+    assert.match(unknown.stdout, /\nHint: the host name no-such-host\.invalid could not be resolved\.\n|\n1 failed \(/);
+  });
+
+  it("gives no hints when some requests worked", async () => {
+    const { stdout } = await run(["-n", "6", "-c", "1", `${server.url}/flaky`]);
+    assert.ok(!stdout.includes("Hint:"));
   });
 
   it("counts HTTP error statuses as failures and lists the status codes", async () => {

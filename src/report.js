@@ -24,6 +24,17 @@ function histogramLines(rows) {
   });
 }
 
+/** When nothing at all worked, say what the most common cause of the usual errors is. */
+export function hintLines(config, analysis) {
+  if (analysis.successes > 0) return [];
+  const { host, port, hostname } = new URL(config.url);
+  const errors = analysis.errorCounts;
+  if (errors.ECONNREFUSED) return [`Hint: nothing is accepting connections on ${host}${port ? "" : " (default port)"} - is the server running?`];
+  if (errors.ENOTFOUND || errors.EAI_AGAIN) return [`Hint: the host name ${hostname} could not be resolved.`];
+  if (errors.timeout === analysis.errors) return [`Hint: every request timed out after ${formatMs(config.timeout)}; the server may be overloaded, or --timeout too short.`];
+  return [];
+}
+
 export function formatText(config, analysis) {
   const { latency } = analysis;
   const targets = config.targets ?? [];
@@ -39,6 +50,7 @@ export function formatText(config, analysis) {
   if (analysis.errors > 0) {
     const detail = Object.entries(analysis.errorCounts).map(([name, count]) => `${name}: ${count}`).join(", ");
     lines.push(`${analysis.errors} failed (${detail})`);
+    lines.push(...hintLines(config, analysis));
   }
   if (analysis.timeline.length >= 3) lines.push("", `Requests per second  ${sparkline(analysis.timeline.map((t) => t.requests))}  (peak ${Math.max(...analysis.timeline.map((t) => t.requests))})`);
   if (analysis.timeline.length >= 3 && analysis.timeline.some((t) => t.meanLatencyMs !== null)) {
